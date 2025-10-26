@@ -1,0 +1,2448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFC & Smith Chart Interactive Tutorial</title>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+        canvas { max-width: 100%; height: auto; image-rendering: crisp-edges; }
+        input[type="range"] { accent-color: #3b82f6; }
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-slate-900 text-white">
+    <div id="root"></div>
+
+    <script>
+        const { useState, useRef, useEffect, Fragment } = React;
+        const e = React.createElement;
+
+        // SVG Icons as components
+        const BookOpenIcon = ({ size = 24, className = "" }) => 
+            e('svg', { 
+                className, width: size, height: size, viewBox: '0 0 24 24', 
+                fill: 'none', stroke: 'currentColor', strokeWidth: 2 
+            },
+                e('path', { d: 'M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z' }),
+                e('path', { d: 'M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z' })
+            );
+
+        const AlertTriangleIcon = ({ size = 24, className = "" }) =>
+            e('svg', {
+                className, width: size, height: size, viewBox: '0 0 24 24',
+                fill: 'none', stroke: 'currentColor', strokeWidth: 2
+            },
+                e('path', { d: 'M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z' }),
+                e('line', { x1: '12', y1: '9', x2: '12', y2: '13' }),
+                e('line', { x1: '12', y1: '17', x2: '12.01', y2: '17' })
+            );
+
+        const CheckCircleIcon = ({ size = 24, className = "" }) =>
+            e('svg', {
+                className, width: size, height: size, viewBox: '0 0 24 24',
+                fill: 'none', stroke: 'currentColor', strokeWidth: 2
+            },
+                e('path', { d: 'M22 11.08V12a10 10 0 1 1-5.93-9.14' }),
+                e('polyline', { points: '22 4 12 14.01 9 11.01' })
+            );
+
+        const InfoIcon = ({ size = 24, className = "" }) =>
+            e('svg', {
+                className, width: size, height: size, viewBox: '0 0 24 24',
+                fill: 'none', stroke: 'currentColor', strokeWidth: 2
+            },
+                e('circle', { cx: '12', cy: '12', r: '10' }),
+                e('line', { x1: '12', y1: '16', x2: '12', y2: '12' }),
+                e('line', { x1: '12', y1: '8', x2: '12.01', y2: '8' })
+            );
+
+        const ExternalLinkIcon = ({ size = 24, className = "" }) =>
+            e('svg', {
+                className, width: size, height: size, viewBox: '0 0 24 24',
+                fill: 'none', stroke: 'currentColor', strokeWidth: 2
+            },
+                e('path', { d: 'M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6' }),
+                e('polyline', { points: '15 3 21 3 21 9' }),
+                e('line', { x1: '10', y1: '14', x2: '21', y2: '3' })
+            );
+
+        const ActivityIcon = ({ size = 24, className = "" }) =>
+            e('svg', {
+                className, width: size, height: size, viewBox: '0 0 24 24',
+                fill: 'none', stroke: 'currentColor', strokeWidth: 2
+            },
+                e('polyline', { points: '22 12 18 12 15 21 9 3 6 12 2 12' })
+            );
+
+        const RadioIcon = ({ size = 24, className = "" }) =>
+            e('svg', {
+                className, width: size, height: size, viewBox: '0 0 24 24',
+                fill: 'none', stroke: 'currentColor', strokeWidth: 2
+            },
+                e('circle', { cx: '12', cy: '12', r: '2' }),
+                e('path', { d: 'M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14' })
+            );
+
+        // ============================================
+        // NFC CONCEPTS SECTION
+        // ============================================
+        const NFCConceptsExplained = () => {
+            const [concept, setConcept] = useState('intro');
+            const [qFactor, setQFactor] = useState(20);
+            const [frequency, setFrequency] = useState(13.56);
+            const [antennaDiameter, setAntennaDiameter] = useState(50);
+            const [antennaTurns, setAntennaTurns] = useState(4);
+            const [antennaWidth, setAntennaWidth] = useState(0.5);
+            const [antennaGap, setAntennaGap] = useState(0.3);
+            const canvasRef = useRef(null);
+            const howItWorksCanvasRef = useRef(null);
+            const antennaSizeCanvasRef = useRef(null);
+            const resonanceCanvasRef = useRef(null);
+            const qFactorVisualizationCanvasRef = useRef(null);
+            const smithNFCCanvasRef = useRef(null);
+            const smithTuningCanvasRef = useRef(null);
+            const [howItWorksStep, setHowItWorksStep] = useState(0);
+            const [readerAntennaSize, setReaderAntennaSize] = useState(50);
+            const [tagSize, setTagSize] = useState(50);
+            const [tuningCapacitor, setTuningCapacitor] = useState(100); // pF
+            const [smithExampleType, setSmithExampleType] = useState('good'); // 'good', 'inductive', 'capacitive', 'mismatch'
+
+            const getBandwidth = (q, f0) => f0 / q;
+
+            const calculateAntennaInductance = () => {
+                const w = antennaWidth / 10;
+                const g = antennaGap / 10;
+                const N = antennaTurns;
+                const Do = antennaDiameter / 10;
+                const Davg = Do - N * (g + w);
+                const l = Davg * Math.PI;
+                const d = 2 * (w + g) / Math.PI;
+                const p = 2;
+                const L_nH = 2 * l * (Math.log(l / d) - 1.07) * Math.pow(N, p);
+                
+                return {
+                    inductance: L_nH / 1000,
+                    Davg: Davg * 10,
+                    circumference: l * 10
+                };
+            };
+
+            const antennaData = calculateAntennaInductance();
+
+            const calculateResonanceCap = (inductance_uH) => {
+                const f = frequency * 1e6;
+                const L = inductance_uH * 1e-6;
+                const C = 1 / (4 * Math.PI * Math.PI * f * f * L);
+                return (C * 1e12).toFixed(1);
+            };
+
+            const capValue = calculateResonanceCap(antennaData.inductance);
+
+            const drawFrequencyResponse = () => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                
+                const ctx = canvas.getContext('2d');
+                const width = canvas.width;
+                const height = canvas.height;
+                
+                ctx.fillStyle = '#1e293b';
+                ctx.fillRect(0, 0, width, height);
+                
+                ctx.strokeStyle = '#64748b';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(60, 30);
+                ctx.lineTo(60, height - 30);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(60, height - 30);
+                ctx.lineTo(width - 30, height - 30);
+                ctx.stroke();
+                
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '12px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('Frequency (MHz)', width / 2, height - 5);
+                
+                ctx.save();
+                ctx.translate(15, height / 2);
+                ctx.rotate(-Math.PI / 2);
+                ctx.fillText('Field Strength', 0, 0);
+                ctx.restore();
+                
+                const f0 = frequency;
+                const freqRange = [f0 - 2, f0 - 1, f0, f0 + 1, f0 + 2];
+                freqRange.forEach((f, idx) => {
+                    const x = 60 + ((idx + 1) * (width - 90) / 6);
+                    ctx.fillStyle = f === f0 ? '#fbbf24' : '#94a3b8';
+                    ctx.fillText(f.toFixed(2), x, height - 15);
+                    ctx.strokeStyle = f === f0 ? '#fbbf24' : '#64748b';
+                    ctx.beginPath();
+                    ctx.moveTo(x, height - 30);
+                    ctx.lineTo(x, height - 25);
+                    ctx.stroke();
+                });
+                
+                const bandwidth = getBandwidth(qFactor, f0);
+                const centerY = height - 30;
+                
+                ctx.strokeStyle = '#3b82f6';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                
+                for (let i = 0; i < width - 90; i++) {
+                    const f = f0 - 2 + (i / (width - 90)) * 4;
+                    const deltaF = Math.abs(f - f0);
+                    const response = 1 / (1 + Math.pow(2 * qFactor * deltaF / f0, 2));
+                    const x = 60 + i;
+                    const y = centerY - response * (height - 80);
+                    
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+                
+                const y3dB = centerY - 0.5 * (height - 80);
+                ctx.strokeStyle = '#10b981';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(60, y3dB);
+                ctx.lineTo(width - 30, y3dB);
+                ctx.stroke();
+                ctx.setLineDash([]);
+                
+                ctx.fillStyle = '#10b981';
+                ctx.font = '11px sans-serif';
+                ctx.fillText('-3dB', 35, y3dB + 5);
+            };
+
+            useEffect(() => {
+                if (concept === 'qfactor') drawFrequencyResponse();
+            }, [qFactor, frequency, concept]);
+
+            const drawHowItWorks = () => {
+                const canvas = howItWorksCanvasRef.current;
+                if (!canvas) return;
+                
+                const ctx = canvas.getContext('2d');
+                const width = canvas.width;
+                const height = canvas.height;
+                
+                ctx.fillStyle = '#1e293b';
+                ctx.fillRect(0, 0, width, height);
+                
+                const centerX = width / 2;
+                const centerY = height / 2;
+                
+                // Draw reader antenna (left side)
+                const readerX = width * 0.25;
+                const readerY = centerY;
+                const readerRadius = 60;
+                
+                ctx.strokeStyle = '#3b82f6';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(readerX, readerY, readerRadius, 0, 2 * Math.PI);
+                ctx.stroke();
+                
+                // Draw coil windings
+                for (let i = 0; i < 3; i++) {
+                    ctx.beginPath();
+                    ctx.arc(readerX, readerY, readerRadius - 10 - i * 8, 0, 2 * Math.PI);
+                    ctx.stroke();
+                }
+                
+                ctx.fillStyle = '#3b82f6';
+                ctx.font = 'bold 12px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('READER', readerX, readerY - readerRadius - 15);
+                ctx.fillText('ANTENNA', readerX, readerY - readerRadius - 3);
+                
+                // Draw tag antenna (right side)
+                const tagX = width * 0.75;
+                const tagY = centerY;
+                const tagRadius = 40;
+                
+                ctx.strokeStyle = howItWorksStep >= 1 ? '#10b981' : '#475569';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(tagX, tagY, tagRadius, 0, 2 * Math.PI);
+                ctx.stroke();
+                
+                for (let i = 0; i < 2; i++) {
+                    ctx.beginPath();
+                    ctx.arc(tagX, tagY, tagRadius - 8 - i * 6, 0, 2 * Math.PI);
+                    ctx.stroke();
+                }
+                
+                ctx.fillStyle = howItWorksStep >= 1 ? '#10b981' : '#64748b';
+                ctx.font = 'bold 11px sans-serif';
+                ctx.fillText('TAG', tagX, tagY - tagRadius - 15);
+                ctx.fillText('COIL', tagX, tagY - tagRadius - 4);
+                
+                // Step 0: Continuous field transmission
+                if (howItWorksStep === 0) {
+                    // Draw field lines from reader
+                    ctx.strokeStyle = '#3b82f6';
+                    ctx.lineWidth = 1.5;
+                    ctx.globalAlpha = 0.6;
+                    
+                    for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 6) {
+                        const startX = readerX + Math.cos(angle) * readerRadius;
+                        const startY = readerY + Math.sin(angle) * readerRadius;
+                        const endX = readerX + Math.cos(angle) * (readerRadius + 50);
+                        const endY = readerY + Math.sin(angle) * (readerRadius + 50);
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(startX, startY);
+                        ctx.lineTo(endX, endY);
+                        ctx.stroke();
+                        
+                        // Arrow heads
+                        const arrowAngle = angle;
+                        ctx.beginPath();
+                        ctx.moveTo(endX, endY);
+                        ctx.lineTo(endX - 8 * Math.cos(arrowAngle - 0.3), endY - 8 * Math.sin(arrowAngle - 0.3));
+                        ctx.moveTo(endX, endY);
+                        ctx.lineTo(endX - 8 * Math.cos(arrowAngle + 0.3), endY - 8 * Math.sin(arrowAngle + 0.3));
+                        ctx.stroke();
+                    }
+                    
+                    ctx.globalAlpha = 1.0;
+                    
+                    // Label
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.font = '13px sans-serif';
+                    ctx.fillText('13.56 MHz electromagnetic field', centerX, height - 30);
+                    ctx.fillText('(always transmitting)', centerX, height - 15);
+                }
+                
+                // Step 1: Tag powers up
+                if (howItWorksStep === 1) {
+                    // Draw field lines reaching tag
+                    ctx.strokeStyle = '#3b82f6';
+                    ctx.lineWidth = 2;
+                    ctx.globalAlpha = 0.6;
+                    
+                    // Field lines from reader to tag
+                    const numLines = 5;
+                    for (let i = 0; i < numLines; i++) {
+                        const yOffset = (i - numLines/2) * 20;
+                        ctx.beginPath();
+                        ctx.moveTo(readerX + readerRadius, readerY + yOffset);
+                        
+                        // Curved line
+                        const midX = (readerX + tagX) / 2;
+                        const curve = 20;
+                        ctx.quadraticCurveTo(midX, readerY + yOffset + curve, tagX - tagRadius, tagY + yOffset);
+                        ctx.stroke();
+                        
+                        // Arrow
+                        ctx.beginPath();
+                        ctx.moveTo(tagX - tagRadius, tagY + yOffset);
+                        ctx.lineTo(tagX - tagRadius - 6, tagY + yOffset - 4);
+                        ctx.moveTo(tagX - tagRadius, tagY + yOffset);
+                        ctx.lineTo(tagX - tagRadius - 6, tagY + yOffset + 4);
+                        ctx.stroke();
+                    }
+                    
+                    ctx.globalAlpha = 1.0;
+                    
+                    // Draw capacitor symbol in tag (charging)
+                    ctx.strokeStyle = '#fbbf24';
+                    ctx.fillStyle = '#fbbf24';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(tagX - 8, tagY - 10);
+                    ctx.lineTo(tagX - 8, tagY + 10);
+                    ctx.moveTo(tagX + 8, tagY - 10);
+                    ctx.lineTo(tagX + 8, tagY + 10);
+                    ctx.stroke();
+                    
+                    // Chip
+                    ctx.fillRect(tagX - 6, tagY - 6, 12, 12);
+                    
+                    ctx.font = '10px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('Power!', tagX, tagY + 25);
+                    
+                    // Labels
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.font = '13px sans-serif';
+                    ctx.fillText('Energy transfers from reader to tag', centerX, height - 30);
+                    ctx.fillText('Tag capacitor charges, chip powers on', centerX, height - 15);
+                }
+                
+                // Step 2: Tag loads the field
+                if (howItWorksStep === 2) {
+                    // Reader field
+                    ctx.strokeStyle = '#3b82f6';
+                    ctx.lineWidth = 2;
+                    ctx.globalAlpha = 0.4;
+                    
+                    for (let i = 0; i < 5; i++) {
+                        const yOffset = (i - 2) * 20;
+                        ctx.beginPath();
+                        ctx.moveTo(readerX + readerRadius, readerY + yOffset);
+                        ctx.quadraticCurveTo((readerX + tagX) / 2, readerY + yOffset + 20, tagX - tagRadius, tagY + yOffset);
+                        ctx.stroke();
+                    }
+                    
+                    // Tag's own field (interfering)
+                    ctx.strokeStyle = '#10b981';
+                    ctx.globalAlpha = 0.5;
+                    
+                    for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 4) {
+                        const startX = tagX + Math.cos(angle) * tagRadius;
+                        const startY = tagY + Math.sin(angle) * tagRadius;
+                        const endX = tagX + Math.cos(angle) * (tagRadius + 35);
+                        const endY = tagY + Math.sin(angle) * (tagRadius + 35);
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(startX, startY);
+                        ctx.lineTo(endX, endY);
+                        ctx.stroke();
+                    }
+                    
+                    ctx.globalAlpha = 1.0;
+                    
+                    // Interference waves
+                    ctx.strokeStyle = '#ef4444';
+                    ctx.lineWidth = 2;
+                    ctx.setLineDash([5, 5]);
+                    
+                    const waveY = centerY;
+                    ctx.beginPath();
+                    for (let x = readerX + readerRadius; x < tagX - tagRadius; x += 10) {
+                        const y = waveY + Math.sin((x - readerX) * 0.3) * 15;
+                        if (x === readerX + readerRadius) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    
+                    ctx.fillStyle = '#ef4444';
+                    ctx.font = '11px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('INTERFERENCE', centerX, centerY - 30);
+                    
+                    // Labels
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.font = '13px sans-serif';
+                    ctx.fillText('Tag creates its own field that disturbs reader\'s field', centerX, height - 30);
+                    ctx.fillText('Reader detects this change', centerX, height - 15);
+                }
+                
+                // Step 3: Tag talks back (modulation)
+                if (howItWorksStep === 3) {
+                    // Reader field with modulation
+                    ctx.strokeStyle = '#3b82f6';
+                    ctx.lineWidth = 2;
+                    ctx.globalAlpha = 0.4;
+                    
+                    for (let i = 0; i < 5; i++) {
+                        const yOffset = (i - 2) * 20;
+                        ctx.beginPath();
+                        ctx.moveTo(readerX + readerRadius, readerY + yOffset);
+                        ctx.quadraticCurveTo((readerX + tagX) / 2, readerY + yOffset + 20, tagX, tagY + yOffset);
+                        ctx.stroke();
+                    }
+                    
+                    ctx.globalAlpha = 1.0;
+                    
+                    // Tag with switching load
+                    ctx.fillStyle = '#10b981';
+                    ctx.fillRect(tagX - 15, tagY - 20, 30, 40);
+                    
+                    ctx.fillStyle = '#1e293b';
+                    ctx.font = 'bold 10px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('LOAD', tagX, tagY - 5);
+                    ctx.fillText('ON/OFF', tagX, tagY + 7);
+                    
+                    // Switching arrows
+                    ctx.strokeStyle = '#fbbf24';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(tagX - 20, tagY);
+                    ctx.lineTo(tagX - 25, tagY);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(tagX + 20, tagY);
+                    ctx.lineTo(tagX + 25, tagY);
+                    ctx.stroke();
+                    
+                    // Modulated signal representation
+                    ctx.strokeStyle = '#fbbf24';
+                    ctx.lineWidth = 2;
+                    
+                    const signalY = height - 80;
+                    const signalStartX = width * 0.2;
+                    const signalWidth = width * 0.6;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(signalStartX, signalY);
+                    
+                    // Digital modulation pattern
+                    const bits = [1, 0, 1, 1, 0, 0, 1, 0, 1];
+                    const bitWidth = signalWidth / bits.length;
+                    
+                    for (let i = 0; i < bits.length; i++) {
+                        const x = signalStartX + i * bitWidth;
+                        const h = bits[i] ? 15 : 5;
+                        ctx.lineTo(x, signalY);
+                        ctx.lineTo(x, signalY - h);
+                        ctx.lineTo(x + bitWidth, signalY - h);
+                        ctx.lineTo(x + bitWidth, signalY);
+                    }
+                    ctx.stroke();
+                    
+                    ctx.fillStyle = '#fbbf24';
+                    ctx.font = '11px sans-serif';
+                    ctx.fillText('Data bits: 101100101', centerX, signalY - 25);
+                    
+                    // Labels
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.font = '13px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('Tag rapidly switches load ON/OFF to send data', centerX, height - 30);
+                    ctx.fillText('Reader detects these changes as 1s and 0s', centerX, height - 15);
+                }
+            };
+
+            useEffect(() => {
+                if (concept === 'howItWorks') drawHowItWorks();
+            }, [concept, howItWorksStep]);
+
+            const drawAntennaSizeComparison = () => {
+                const canvas = antennaSizeCanvasRef.current;
+                if (!canvas) return;
+                
+                const ctx = canvas.getContext('2d');
+                const width = canvas.width;
+                const height = canvas.height;
+                
+                ctx.fillStyle = '#1e293b';
+                ctx.fillRect(0, 0, width, height);
+                
+                const centerX = width / 2;
+                const centerY = height / 2;
+                
+                // Scale factor to fit on canvas
+                const scale = 2;
+                
+                // Draw reader antenna
+                const readerRadius = readerAntennaSize * scale / 2;
+                ctx.strokeStyle = '#3b82f6';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, readerRadius, 0, 2 * Math.PI);
+                ctx.stroke();
+                
+                // Draw coil windings
+                for (let i = 0; i < 3; i++) {
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, readerRadius - 8 - i * 6, 0, 2 * Math.PI);
+                    ctx.stroke();
+                }
+                
+                ctx.fillStyle = '#3b82f6';
+                ctx.font = 'bold 14px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(`Reader: ${readerAntennaSize}mm`, centerX, centerY - readerRadius - 15);
+                
+                // Draw tag (as rectangle for card-style, or circle for fob)
+                const tagRadius = tagSize * scale / 2;
+                const tagOffset = Math.max(readerRadius, tagRadius) + 30;
+                
+                if (tagSize >= 40) {
+                    // Card-style tag (rectangle)
+                    const tagWidth = tagSize * scale * 0.8;
+                    const tagHeight = tagSize * scale * 0.5;
+                    
+                    ctx.strokeStyle = '#10b981';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(centerX + tagOffset - tagWidth/2, centerY - tagHeight/2, tagWidth, tagHeight);
+                    
+                    // Coil inside
+                    ctx.beginPath();
+                    ctx.rect(centerX + tagOffset - tagWidth/2 + 10, centerY - tagHeight/2 + 8, tagWidth - 20, tagHeight - 16);
+                    ctx.stroke();
+                    ctx.beginPath();
+                    ctx.rect(centerX + tagOffset - tagWidth/2 + 15, centerY - tagHeight/2 + 12, tagWidth - 30, tagHeight - 24);
+                    ctx.stroke();
+                    
+                    ctx.fillStyle = '#10b981';
+                    ctx.font = 'bold 12px sans-serif';
+                    ctx.fillText(`Tag: ${tagSize}mm`, centerX + tagOffset, centerY - tagHeight/2 - 10);
+                    ctx.font = '10px sans-serif';
+                    ctx.fillText('(card)', centerX + tagOffset, centerY - tagHeight/2 + 3);
+                } else {
+                    // Fob-style tag (circle)
+                    ctx.strokeStyle = '#10b981';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(centerX + tagOffset, centerY, tagRadius, 0, 2 * Math.PI);
+                    ctx.stroke();
+                    
+                    for (let i = 0; i < 2; i++) {
+                        ctx.beginPath();
+                        ctx.arc(centerX + tagOffset, centerY, tagRadius - 6 - i * 5, 0, 2 * Math.PI);
+                        ctx.stroke();
+                    }
+                    
+                    ctx.fillStyle = '#10b981';
+                    ctx.font = 'bold 12px sans-serif';
+                    ctx.fillText(`Tag: ${tagSize}mm`, centerX + tagOffset, centerY - tagRadius - 10);
+                    ctx.font = '10px sans-serif';
+                    ctx.fillText('(fob)', centerX + tagOffset, centerY - tagRadius + 3);
+                }
+                
+                // Draw field lines showing coupling
+                const couplingQuality = Math.min(tagSize / readerAntennaSize, 1);
+                const numFieldLines = Math.max(3, Math.floor(couplingQuality * 8));
+                
+                ctx.strokeStyle = '#fbbf24';
+                ctx.lineWidth = 1.5;
+                ctx.globalAlpha = 0.5;
+                
+                for (let i = 0; i < numFieldLines; i++) {
+                    const angle = (i / numFieldLines) * Math.PI - Math.PI / 2;
+                    const startX = centerX + Math.cos(angle) * readerRadius;
+                    const startY = centerY + Math.sin(angle) * readerRadius;
+                    
+                    let endX, endY;
+                    if (tagSize >= 40) {
+                        // To rectangle
+                        endX = centerX + tagOffset - (tagSize * scale * 0.8) / 2;
+                        endY = centerY + (angle / Math.PI) * (tagSize * scale * 0.5) / 2;
+                    } else {
+                        // To circle
+                        endX = centerX + tagOffset - Math.cos(angle) * tagRadius;
+                        endY = centerY - Math.sin(angle) * tagRadius;
+                    }
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(startX, startY);
+                    ctx.quadraticCurveTo((startX + endX) / 2, (startY + endY) / 2 - 20, endX, endY);
+                    ctx.stroke();
+                }
+                
+                ctx.globalAlpha = 1.0;
+                
+                // Coupling quality indicator
+                let qualityText, qualityColor;
+                if (couplingQuality > 0.8) {
+                    qualityText = 'Excellent Coupling';
+                    qualityColor = '#10b981';
+                } else if (couplingQuality > 0.5) {
+                    qualityText = 'Good Coupling';
+                    qualityColor = '#fbbf24';
+                } else if (couplingQuality > 0.3) {
+                    qualityText = 'Fair Coupling';
+                    qualityColor = '#f97316';
+                } else {
+                    qualityText = 'Poor Coupling';
+                    qualityColor = '#ef4444';
+                }
+                
+                ctx.fillStyle = qualityColor;
+                ctx.font = 'bold 14px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(qualityText, centerX, height - 20);
+                
+                // Size ratio
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '12px sans-serif';
+                ctx.fillText(`Tag is ${(couplingQuality * 100).toFixed(0)}% of reader size`, centerX, height - 5);
+            };
+
+            useEffect(() => {
+                if (concept === 'howItWorks') {
+                    drawHowItWorks();
+                    drawAntennaSizeComparison();
+                }
+            }, [concept, howItWorksStep, readerAntennaSize, tagSize]);
+
+            const drawResonanceTuning = () => {
+                const canvas = resonanceCanvasRef.current;
+                if (!canvas) return;
+                
+                const ctx = canvas.getContext('2d');
+                const width = canvas.width;
+                const height = canvas.height;
+                
+                ctx.fillStyle = '#1e293b';
+                ctx.fillRect(0, 0, width, height);
+                
+                // Calculate resonance offset (ideal is 100pF for this demo)
+                const idealCap = parseFloat(capValue);
+                const detunePercent = Math.abs(tuningCapacitor - idealCap) / idealCap;
+                const resonanceQuality = Math.max(0, 1 - detunePercent * 2); // Goes from 1 (perfect) to 0 (way off)
+                
+                const centerX = width / 2;
+                const centerY = height / 2;
+                
+                // Draw reader antenna
+                const readerRadius = 50;
+                ctx.strokeStyle = '#3b82f6';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, readerRadius, 0, 2 * Math.PI);
+                ctx.stroke();
+                
+                for (let i = 0; i < 3; i++) {
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, readerRadius - 8 - i * 6, 0, 2 * Math.PI);
+                    ctx.stroke();
+                }
+                
+                // Draw capacitor symbol next to antenna
+                ctx.strokeStyle = '#fbbf24';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(centerX - readerRadius - 20, centerY - 10);
+                ctx.lineTo(centerX - readerRadius - 20, centerY + 10);
+                ctx.moveTo(centerX - readerRadius - 30, centerY - 10);
+                ctx.lineTo(centerX - readerRadius - 30, centerY + 10);
+                ctx.stroke();
+                
+                ctx.fillStyle = '#fbbf24';
+                ctx.font = '11px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(`C=${tuningCapacitor}pF`, centerX - readerRadius - 25, centerY - 20);
+                
+                // Draw field strength visualization
+                const maxFieldRadius = 120;
+                const fieldStrength = resonanceQuality;
+                const fieldRadius = readerRadius + fieldStrength * maxFieldRadius;
+                
+                // Field strength gradient
+                const gradient = ctx.createRadialGradient(centerX, centerY, readerRadius, centerX, centerY, fieldRadius);
+                gradient.addColorStop(0, `rgba(59, 130, 246, ${0.6 * fieldStrength})`);
+                gradient.addColorStop(1, 'rgba(59, 130, 246, 0)');
+                
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, fieldRadius, 0, 2 * Math.PI);
+                ctx.fill();
+                
+                // Field lines showing strength
+                const numLines = Math.max(3, Math.floor(fieldStrength * 12));
+                ctx.strokeStyle = '#3b82f6';
+                ctx.lineWidth = 1.5;
+                ctx.globalAlpha = 0.6 * fieldStrength;
+                
+                for (let i = 0; i < numLines; i++) {
+                    const angle = (i / numLines) * Math.PI * 2;
+                    const startX = centerX + Math.cos(angle) * readerRadius;
+                    const startY = centerY + Math.sin(angle) * readerRadius;
+                    const endX = centerX + Math.cos(angle) * fieldRadius;
+                    const endY = centerY + Math.sin(angle) * fieldRadius;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(startX, startY);
+                    ctx.lineTo(endX, endY);
+                    ctx.stroke();
+                    
+                    // Arrow head
+                    const arrowSize = 6;
+                    ctx.beginPath();
+                    ctx.moveTo(endX, endY);
+                    ctx.lineTo(endX - arrowSize * Math.cos(angle - 0.3), endY - arrowSize * Math.sin(angle - 0.3));
+                    ctx.moveTo(endX, endY);
+                    ctx.lineTo(endX - arrowSize * Math.cos(angle + 0.3), endY - arrowSize * Math.sin(angle + 0.3));
+                    ctx.stroke();
+                }
+                
+                ctx.globalAlpha = 1.0;
+                
+                // Draw tag at fixed distance to show if it can be read
+                const tagDistance = 100;
+                const tagX = centerX + tagDistance;
+                const tagY = centerY;
+                const tagRadius = 30;
+                
+                const canReadTag = fieldRadius > tagDistance - tagRadius;
+                
+                ctx.strokeStyle = canReadTag ? '#10b981' : '#ef4444';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(tagX, tagY, tagRadius, 0, 2 * Math.PI);
+                ctx.stroke();
+                
+                for (let i = 0; i < 2; i++) {
+                    ctx.beginPath();
+                    ctx.arc(tagX, tagY, tagRadius - 6 - i * 5, 0, 2 * Math.PI);
+                    ctx.stroke();
+                }
+                
+                ctx.fillStyle = canReadTag ? '#10b981' : '#ef4444';
+                ctx.font = 'bold 11px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(canReadTag ? '✓ TAG READS' : '✗ NO SIGNAL', tagX, tagY);
+                
+                // Status indicator
+                let statusText, statusColor;
+                if (resonanceQuality > 0.9) {
+                    statusText = 'RESONANT - Maximum field strength!';
+                    statusColor = '#10b981';
+                } else if (resonanceQuality > 0.7) {
+                    statusText = 'Close to resonance - Good performance';
+                    statusColor = '#fbbf24';
+                } else if (resonanceQuality > 0.4) {
+                    statusText = 'Off resonance - Reduced range';
+                    statusColor = '#f97316';
+                } else {
+                    statusText = 'Way off resonance - Poor/no detection';
+                    statusColor = '#ef4444';
+                }
+                
+                ctx.fillStyle = statusColor;
+                ctx.font = 'bold 16px sans-serif';
+                ctx.fillText(statusText, centerX, 30);
+                
+                // Detuning info
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '12px sans-serif';
+                const detuneText = resonanceQuality > 0.9 ? 
+                    `Perfect! Right at ${idealCap}pF` : 
+                    `${Math.abs(tuningCapacitor - idealCap).toFixed(1)}pF ${tuningCapacitor > idealCap ? 'too much' : 'too little'} (ideal: ${idealCap}pF)`;
+                ctx.fillText(detuneText, centerX, height - 20);
+                
+                // Power consumption indicator
+                const powerWaste = 1 - resonanceQuality;
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '11px sans-serif';
+                ctx.fillText(`Power efficiency: ${((1 - powerWaste) * 100).toFixed(0)}%`, centerX, height - 5);
+            };
+
+            const drawQFactorTradeoffs = () => {
+                const canvas = qFactorVisualizationCanvasRef.current;
+                if (!canvas) return;
+                
+                const ctx = canvas.getContext('2d');
+                const width = canvas.width;
+                const height = canvas.height;
+                
+                ctx.fillStyle = '#1e293b';
+                ctx.fillRect(0, 0, width, height);
+                
+                // Split canvas into two scenarios
+                const leftCenterX = width * 0.25;
+                const rightCenterX = width * 0.75;
+                const centerY = height * 0.4;
+                
+                // Left side: High Q (narrow bandwidth)
+                const highQ = 40;
+                const highQRadius = 45;
+                
+                ctx.fillStyle = '#8b5cf6';
+                ctx.font = 'bold 14px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(`HIGH Q (Q=${highQ})`, leftCenterX, 25);
+                ctx.font = '11px sans-serif';
+                ctx.fillStyle = '#94a3b8';
+                ctx.fillText('Narrow Bandwidth', leftCenterX, 40);
+                
+                // Antenna
+                ctx.strokeStyle = '#8b5cf6';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(leftCenterX, centerY, highQRadius, 0, 2 * Math.PI);
+                ctx.stroke();
+                
+                // Strong field (high Q = more stored energy)
+                const gradient1 = ctx.createRadialGradient(leftCenterX, centerY, highQRadius, leftCenterX, centerY, highQRadius + 80);
+                gradient1.addColorStop(0, 'rgba(139, 92, 246, 0.5)');
+                gradient1.addColorStop(1, 'rgba(139, 92, 246, 0)');
+                ctx.fillStyle = gradient1;
+                ctx.beginPath();
+                ctx.arc(leftCenterX, centerY, highQRadius + 80, 0, 2 * Math.PI);
+                ctx.fill();
+                
+                // Many field lines
+                ctx.strokeStyle = '#8b5cf6';
+                ctx.lineWidth = 1.5;
+                ctx.globalAlpha = 0.6;
+                for (let i = 0; i < 16; i++) {
+                    const angle = (i / 16) * Math.PI * 2;
+                    ctx.beginPath();
+                    ctx.moveTo(leftCenterX + Math.cos(angle) * highQRadius, centerY + Math.sin(angle) * highQRadius);
+                    ctx.lineTo(leftCenterX + Math.cos(angle) * (highQRadius + 80), centerY + Math.sin(angle) * (highQRadius + 80));
+                    ctx.stroke();
+                }
+                ctx.globalAlpha = 1.0;
+                
+                // Tag with checkmark (long range)
+                ctx.strokeStyle = '#10b981';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(leftCenterX + 90, centerY, 25, 0, 2 * Math.PI);
+                ctx.stroke();
+                
+                ctx.fillStyle = '#10b981';
+                ctx.font = 'bold 20px sans-serif';
+                ctx.fillText('✓', leftCenterX + 90, centerY + 7);
+                
+                ctx.font = '11px sans-serif';
+                ctx.fillText('LONG RANGE', leftCenterX, centerY + highQRadius + 25);
+                
+                // But show sensitivity issues
+                ctx.fillStyle = '#ef4444';
+                ctx.font = '10px sans-serif';
+                ctx.fillText('⚠ Sensitive to:', leftCenterX, height - 65);
+                ctx.fillText('• Component tolerance', leftCenterX, height - 50);
+                ctx.fillText('• Temperature drift', leftCenterX, height - 35);
+                ctx.fillText('• Nearby metal', leftCenterX, height - 20);
+                ctx.fillText('• Component aging', leftCenterX, height - 5);
+                
+                // Right side: Low Q (wide bandwidth)
+                const lowQ = 10;
+                const lowQRadius = 45;
+                
+                ctx.fillStyle = '#10b981';
+                ctx.font = 'bold 14px sans-serif';
+                ctx.fillText(`LOW Q (Q=${lowQ})`, rightCenterX, 25);
+                ctx.font = '11px sans-serif';
+                ctx.fillStyle = '#94a3b8';
+                ctx.fillText('Wide Bandwidth', rightCenterX, 40);
+                
+                // Antenna
+                ctx.strokeStyle = '#10b981';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(rightCenterX, centerY, lowQRadius, 0, 2 * Math.PI);
+                ctx.stroke();
+                
+                // Weaker field (low Q = less stored energy)
+                const gradient2 = ctx.createRadialGradient(rightCenterX, centerY, lowQRadius, rightCenterX, centerY, lowQRadius + 50);
+                gradient2.addColorStop(0, 'rgba(16, 185, 129, 0.4)');
+                gradient2.addColorStop(1, 'rgba(16, 185, 129, 0)');
+                ctx.fillStyle = gradient2;
+                ctx.beginPath();
+                ctx.arc(rightCenterX, centerY, lowQRadius + 50, 0, 2 * Math.PI);
+                ctx.fill();
+                
+                // Fewer field lines
+                ctx.strokeStyle = '#10b981';
+                ctx.lineWidth = 1.5;
+                ctx.globalAlpha = 0.5;
+                for (let i = 0; i < 8; i++) {
+                    const angle = (i / 8) * Math.PI * 2;
+                    ctx.beginPath();
+                    ctx.moveTo(rightCenterX + Math.cos(angle) * lowQRadius, centerY + Math.sin(angle) * lowQRadius);
+                    ctx.lineTo(rightCenterX + Math.cos(angle) * (lowQRadius + 50), centerY + Math.sin(angle) * (lowQRadius + 50));
+                    ctx.stroke();
+                }
+                ctx.globalAlpha = 1.0;
+                
+                // Tag closer (shorter range)
+                ctx.strokeStyle = '#10b981';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(rightCenterX + 60, centerY, 25, 0, 2 * Math.PI);
+                ctx.stroke();
+                
+                ctx.fillStyle = '#10b981';
+                ctx.font = 'bold 20px sans-serif';
+                ctx.fillText('✓', rightCenterX + 60, centerY + 7);
+                
+                ctx.font = '11px sans-serif';
+                ctx.fillText('SHORT RANGE', rightCenterX, centerY + lowQRadius + 25);
+                
+                // But show reliability benefits
+                ctx.fillStyle = '#10b981';
+                ctx.font = '10px sans-serif';
+                ctx.fillText('✓ Stable & Reliable:', rightCenterX, height - 65);
+                ctx.fillText('• ±5% components OK', rightCenterX, height - 50);
+                ctx.fillText('• Works in temp range', rightCenterX, height - 35);
+                ctx.fillText('• Less metal sensitivity', rightCenterX, height - 20);
+                ctx.fillText('• Consistent over time', rightCenterX, height - 5);
+                
+                // Divider line
+                ctx.strokeStyle = '#475569';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.moveTo(width / 2, 50);
+                ctx.lineTo(width / 2, height - 80);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            };
+
+            useEffect(() => {
+                if (concept === 'resonance') {
+                    drawResonanceTuning();
+                } else if (concept === 'qfactor') {
+                    drawQFactorTradeoffs();
+                }
+            }, [concept, tuningCapacitor, qFactor, capValue]);
+            
+            // Initialize tuning capacitor when entering resonance section
+            useEffect(() => {
+                if (concept === 'resonance') {
+                    setTuningCapacitor(parseFloat(capValue));
+                }
+            }, [concept]);
+
+            const drawSmithNFCExamples = () => {
+                const canvas = smithNFCCanvasRef.current;
+                if (!canvas) return;
+                
+                const ctx = canvas.getContext('2d');
+                const width = canvas.width;
+                const height = canvas.height;
+                const Z0 = 50;
+                
+                ctx.fillStyle = '#1e293b';
+                ctx.fillRect(0, 0, width, height);
+                
+                const centerX = width / 2;
+                const centerY = height / 2;
+                const radius = Math.min(centerX, centerY) - 50;
+                
+                // Draw basic Smith chart
+                ctx.strokeStyle = '#64748b';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+                ctx.stroke();
+                
+                // Horizontal axis
+                ctx.strokeStyle = '#475569';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(centerX - radius, centerY);
+                ctx.lineTo(centerX + radius, centerY);
+                ctx.stroke();
+                
+                // Vertical axis
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY - radius);
+                ctx.lineTo(centerX, centerY + radius);
+                ctx.stroke();
+                
+                // Add some constant R circles (light)
+                const rValues = [10, 25, 50];
+                ctx.strokeStyle = '#3b82f6';
+                ctx.lineWidth = 0.5;
+                ctx.globalAlpha = 0.2;
+                rValues.forEach(r => {
+                    const centerR = (Z0 * radius) / (Z0 + r);
+                    const radiusR = (Z0 * radius) / (Z0 + r);
+                    ctx.beginPath();
+                    ctx.arc(centerX + centerR, centerY, radiusR, 0, 2 * Math.PI);
+                    ctx.stroke();
+                });
+                
+                // Add some constant X curves (light)
+                const xValues = [-50, -25, 25, 50];
+                ctx.strokeStyle = '#10b981';
+                xValues.forEach(x => {
+                    const centerReactX = centerX + radius;
+                    const centerReactY = centerY + (Z0 * radius) / x;
+                    const radiusReact = Math.abs((Z0 * radius) / x);
+                    ctx.beginPath();
+                    ctx.arc(centerReactX, centerReactY, radiusReact, -Math.PI / 2, Math.PI / 2, x > 0);
+                    ctx.stroke();
+                });
+                
+                ctx.globalAlpha = 1.0;
+                
+                // Center point (50Ω match)
+                ctx.fillStyle = '#94a3b8';
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, 4, 0, 2 * Math.PI);
+                ctx.fill();
+                ctx.font = '10px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('50Ω', centerX, centerY - 10);
+                
+                // Helper function to convert impedance to canvas point
+                const impedanceToCanvas = (r, x) => {
+                    const numerator_re = r - Z0;
+                    const numerator_im = x;
+                    const denominator_re = r + Z0;
+                    const denominator_im = x;
+                    const denom_mag_sq = denominator_re * denominator_re + denominator_im * denominator_im;
+                    const gamma_re = (numerator_re * denominator_re + numerator_im * denominator_im) / denom_mag_sq;
+                    const gamma_im = (numerator_im * denominator_re - numerator_re * denominator_im) / denom_mag_sq;
+                    return {
+                        x: centerX + gamma_re * radius,
+                        y: centerY - gamma_im * radius
+                    };
+                };
+                
+                // Plot example points based on selected type
+                if (smithExampleType === 'good') {
+                    // Good NFC impedance: 3.5Ω + 0j (resonant, low impedance)
+                    const pt = impedanceToCanvas(3.5, 0);
+                    ctx.fillStyle = '#10b981';
+                    ctx.beginPath();
+                    ctx.arc(pt.x, pt.y, 8, 0, 2 * Math.PI);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = '#10b981';
+                    ctx.font = 'bold 14px sans-serif';
+                    ctx.textAlign = 'left';
+                    ctx.fillText('✓ GOOD', pt.x + 15, pt.y - 15);
+                    ctx.font = '12px sans-serif';
+                    ctx.fillText('3.5Ω + 0j', pt.x + 15, pt.y);
+                    ctx.font = '10px sans-serif';
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.fillText('Resonant & low Z', pt.x + 15, pt.y + 13);
+                    ctx.fillText('Typical NFC target', pt.x + 15, pt.y + 25);
+                    
+                } else if (smithExampleType === 'inductive') {
+                    // Inductive: Not enough Cseries
+                    const pt = impedanceToCanvas(5, 15);
+                    ctx.fillStyle = '#f97316';
+                    ctx.beginPath();
+                    ctx.arc(pt.x, pt.y, 8, 0, 2 * Math.PI);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = '#f97316';
+                    ctx.font = 'bold 14px sans-serif';
+                    ctx.textAlign = 'left';
+                    ctx.fillText('⚠ INDUCTIVE', pt.x + 15, pt.y - 15);
+                    ctx.font = '12px sans-serif';
+                    ctx.fillText('5Ω + 15j', pt.x + 15, pt.y);
+                    ctx.font = '10px sans-serif';
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.fillText('Not resonant', pt.x + 15, pt.y + 13);
+                    ctx.fillText('Need MORE Cseries', pt.x + 15, pt.y + 25);
+                    
+                    // Draw arrow pointing down (toward resonance)
+                    ctx.strokeStyle = '#fbbf24';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(pt.x, pt.y);
+                    ctx.lineTo(pt.x - 10, centerY);
+                    ctx.stroke();
+                    // Arrow head
+                    ctx.beginPath();
+                    ctx.moveTo(pt.x - 10, centerY);
+                    ctx.lineTo(pt.x - 5, centerY - 5);
+                    ctx.moveTo(pt.x - 10, centerY);
+                    ctx.lineTo(pt.x - 15, centerY - 5);
+                    ctx.stroke();
+                    
+                } else if (smithExampleType === 'capacitive') {
+                    // Capacitive: Too much Cseries
+                    const pt = impedanceToCanvas(4, -12);
+                    ctx.fillStyle = '#ef4444';
+                    ctx.beginPath();
+                    ctx.arc(pt.x, pt.y, 8, 0, 2 * Math.PI);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = '#ef4444';
+                    ctx.font = 'bold 14px sans-serif';
+                    ctx.textAlign = 'left';
+                    ctx.fillText('⚠ CAPACITIVE', pt.x + 15, pt.y + 25);
+                    ctx.font = '12px sans-serif';
+                    ctx.fillText('4Ω - 12j', pt.x + 15, pt.y + 38);
+                    ctx.font = '10px sans-serif';
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.fillText('Not resonant', pt.x + 15, pt.y + 51);
+                    ctx.fillText('Need LESS Cseries', pt.x + 15, pt.y + 63);
+                    
+                    // Draw arrow pointing up (toward resonance)
+                    ctx.strokeStyle = '#fbbf24';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(pt.x, pt.y);
+                    ctx.lineTo(pt.x - 10, centerY);
+                    ctx.stroke();
+                    // Arrow head
+                    ctx.beginPath();
+                    ctx.moveTo(pt.x - 10, centerY);
+                    ctx.lineTo(pt.x - 5, centerY + 5);
+                    ctx.moveTo(pt.x - 10, centerY);
+                    ctx.lineTo(pt.x - 15, centerY + 5);
+                    ctx.stroke();
+                    
+                } else if (smithExampleType === 'mismatch') {
+                    // Large mismatch: Wrong matching network
+                    const pt = impedanceToCanvas(25, 8);
+                    ctx.fillStyle = '#ef4444';
+                    ctx.beginPath();
+                    ctx.arc(pt.x, pt.y, 8, 0, 2 * Math.PI);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = '#ef4444';
+                    ctx.font = 'bold 14px sans-serif';
+                    ctx.textAlign = 'right';
+                    ctx.fillText('✗ BAD MATCH', pt.x - 15, pt.y - 15);
+                    ctx.font = '12px sans-serif';
+                    ctx.fillText('25Ω + 8j', pt.x - 15, pt.y);
+                    ctx.font = '10px sans-serif';
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.fillText('Impedance too high', pt.x - 15, pt.y + 13);
+                    ctx.fillText('Check entire network', pt.x - 15, pt.y + 25);
+                }
+                
+                // Labels
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '11px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('INDUCTIVE (upper half)', centerX, 25);
+                ctx.fillText('CAPACITIVE (lower half)', centerX, height - 15);
+                ctx.textAlign = 'left';
+                ctx.fillText('Low Z', 20, centerY);
+                ctx.textAlign = 'right';
+                ctx.fillText('High Z', width - 20, centerY);
+            };
+
+            const drawSmithTuningSimulator = () => {
+                const canvas = smithTuningCanvasRef.current;
+                if (!canvas) return;
+                
+                const ctx = canvas.getContext('2d');
+                const width = canvas.width;
+                const height = canvas.height;
+                const Z0 = 50;
+                
+                ctx.fillStyle = '#1e293b';
+                ctx.fillRect(0, 0, width, height);
+                
+                const centerX = width / 2;
+                const centerY = height / 2;
+                const radius = Math.min(centerX, centerY) - 50;
+                
+                // Draw Smith chart
+                ctx.strokeStyle = '#64748b';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+                ctx.stroke();
+                
+                ctx.strokeStyle = '#475569';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(centerX - radius, centerY);
+                ctx.lineTo(centerX + radius, centerY);
+                ctx.stroke();
+                
+                // Simulate how antenna impedance changes with tuning cap
+                // Antenna inductance is fixed, but Cseries changes the net reactance
+                const L = antennaData.inductance * 1e-6; // µH to H
+                const f = 13.56e6; // Hz
+                const XL = 2 * Math.PI * f * L; // Inductive reactance of antenna
+                
+                const C = tuningCapacitor * 1e-12; // pF to F
+                const XC = 1 / (2 * Math.PI * f * C); // Capacitive reactance
+                
+                const netReactance = XL - XC; // Net reactance (positive = inductive, negative = capacitive)
+                const antennaR = 3; // Assume 3Ω antenna resistance
+                
+                // Plot the impedance point
+                const impedanceToCanvas = (r, x) => {
+                    const numerator_re = r - Z0;
+                    const numerator_im = x;
+                    const denominator_re = r + Z0;
+                    const denominator_im = x;
+                    const denom_mag_sq = denominator_re * denominator_re + denominator_im * denominator_im;
+                    const gamma_re = (numerator_re * denominator_re + numerator_im * denominator_im) / denom_mag_sq;
+                    const gamma_im = (numerator_im * denominator_re - numerator_re * denominator_im) / denom_mag_sq;
+                    return {
+                        x: centerX + gamma_re * radius,
+                        y: centerY - gamma_im * radius
+                    };
+                };
+                
+                const pt = impedanceToCanvas(antennaR, netReactance);
+                
+                // Determine status
+                let statusColor, statusText;
+                if (Math.abs(netReactance) < 2) {
+                    statusColor = '#10b981';
+                    statusText = '✓ RESONANT';
+                } else if (Math.abs(netReactance) < 8) {
+                    statusColor = '#fbbf24';
+                    statusText = '⚠ CLOSE';
+                } else {
+                    statusColor = '#ef4444';
+                    statusText = '✗ OFF';
+                }
+                
+                // Draw impedance point
+                ctx.fillStyle = statusColor;
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 10, 0, 2 * Math.PI);
+                ctx.fill();
+                
+                // Draw trail showing movement
+                const capRange = [parseFloat(capValue) - 30, parseFloat(capValue) + 30];
+                ctx.strokeStyle = statusColor;
+                ctx.lineWidth = 1;
+                ctx.globalAlpha = 0.3;
+                ctx.beginPath();
+                for (let cap = capRange[0]; cap <= capRange[1]; cap += 2) {
+                    const C_temp = cap * 1e-12;
+                    const XC_temp = 1 / (2 * Math.PI * f * C_temp);
+                    const netX_temp = XL - XC_temp;
+                    const pt_temp = impedanceToCanvas(antennaR, netX_temp);
+                    if (cap === capRange[0]) ctx.moveTo(pt_temp.x, pt_temp.y);
+                    else ctx.lineTo(pt_temp.x, pt_temp.y);
+                }
+                ctx.stroke();
+                ctx.globalAlpha = 1.0;
+                
+                // Info box
+                ctx.fillStyle = '#1e293b';
+                ctx.fillRect(20, 20, 200, 100);
+                ctx.strokeStyle = statusColor;
+                ctx.lineWidth = 2;
+                ctx.strokeRect(20, 20, 200, 100);
+                
+                ctx.fillStyle = statusColor;
+                ctx.font = 'bold 16px sans-serif';
+                ctx.textAlign = 'left';
+                ctx.fillText(statusText, 30, 45);
+                
+                ctx.fillStyle = '#fff';
+                ctx.font = '12px sans-serif';
+                ctx.fillText(`Z = ${antennaR.toFixed(1)}Ω ${netReactance >= 0 ? '+' : ''}${netReactance.toFixed(1)}j`, 30, 65);
+                
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '11px sans-serif';
+                ctx.fillText(`Cseries: ${tuningCapacitor}pF`, 30, 85);
+                ctx.fillText(`Ideal: ${capValue}pF`, 30, 100);
+                
+                // Instruction
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '11px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('Adjust capacitor below to see impedance move', centerX, height - 10);
+            };
+
+            useEffect(() => {
+                if (concept === 'smithchart') {
+                    drawSmithNFCExamples();
+                    drawSmithTuningSimulator();
+                }
+            }, [concept, smithExampleType, tuningCapacitor, antennaData, capValue]);
+
+            const concepts = {
+                intro: {
+                    title: "What Are We Trying To Do?",
+                    icon: e(BookOpenIcon, { size: 24, className: "text-blue-400" }),
+                    content: e('div', { className: 'space-y-4' },
+                        e('p', { className: 'text-gray-300' },
+                            'You\'re trying to add an NFC reader and antenna to your hardware. You want it to reliably read NFC tags/cards at a useful distance without breaking the bank or failing certification.'
+                        ),
+                        e('div', { className: 'bg-slate-700 p-4 rounded space-y-3' },
+                            e('h4', { className: 'text-white font-semibold mb-2' }, 'Your Goals'),
+                            e('ul', { className: 'text-sm text-gray-400 space-y-1 list-disc list-inside' },
+                                e('li', null, 'Read tags at 3-5cm distance (typical requirement)'),
+                                e('li', null, 'Work reliably across temperature and component variations'),
+                                e('li', null, 'Pass EMC certification (FCC, CE) without expensive iterations'),
+                                e('li', null, 'Use affordable, readily available components')
+                            )
+                        ),
+                        e('div', { className: 'bg-orange-900 bg-opacity-30 p-4 rounded border border-orange-700 space-y-3' },
+                            e('h4', { className: 'text-orange-400 font-semibold mb-2' }, 'The Trade-offs You\'ll Face'),
+                            e('div', { className: 'text-sm text-gray-300 space-y-2' },
+                                e('div', null,
+                                    e('strong', { className: 'text-white' }, 'Range vs. Reliability:'),
+                                    e('p', { className: 'text-xs text-gray-400 mt-1' }, 'Push for maximum range → sensitive to component tolerances, temperature, nearby metal. Design for reliability → shorter range but works consistently.')
+                                ),
+                                e('div', null,
+                                    e('strong', { className: 'text-white' }, 'Component Cost vs. Performance:'),
+                                    e('p', { className: 'text-xs text-gray-400 mt-1' }, 'Tight tolerance parts (±1% NPO caps) = better performance but $$. Looser tolerance (±5%) = cheaper but narrower operating window.')
+                                ),
+                                e('div', null,
+                                    e('strong', { className: 'text-white' }, 'EMC Filter vs. Field Strength:'),
+                                    e('p', { className: 'text-xs text-gray-400 mt-1' }, 'Strong EMC filtering = easier certification but kills your field strength. Weak filtering = more range but EMC test risk.')
+                                )
+                            )
+                        ),
+                        e('div', { className: 'bg-blue-900 bg-opacity-30 p-4 rounded border border-blue-700' },
+                            e('h4', { className: 'text-blue-400 font-semibold mb-2' }, 'What This Tutorial Covers'),
+                            e('p', { className: 'text-sm text-gray-300' },
+                                'The concepts you need to make smart trade-offs: resonance tuning, Q factor (bandwidth), impedance matching, and how to debug when things don\'t work. This isn\'t a complete design guide - it\'s the fundamentals so you can understand ',
+                                e('em', null, 'why'), ' your antenna matching network looks the way it does.'
+                            )
+                        )
+                    )
+                },
+
+                howItWorks: {
+                    title: "How NFC Reading Actually Works",
+                    icon: e(RadioIcon, { size: 24, className: "text-cyan-400" }),
+                    content: e('div', { className: 'space-y-4' },
+                        e('p', { className: 'text-gray-300' },
+                            'Before we talk about matching networks and capacitors, let\'s understand what\'s actually happening when you read an NFC tag.'
+                        ),
+                        
+                        e('div', { className: 'bg-blue-900 bg-opacity-30 p-4 rounded border border-blue-700 space-y-3' },
+                            e('h4', { className: 'text-blue-400 font-semibold mb-2' }, 'Yes, Current is Always Flowing'),
+                            e('p', { className: 'text-sm text-gray-300' },
+                                'Your reader\'s antenna is continuously transmitting a 13.56 MHz electromagnetic field - think of it like a radio station that never turns off. Current oscillates back and forth through the antenna coil at 13.56 million times per second, creating an invisible magnetic field bubble around the antenna.'
+                            ),
+                            e('div', { className: 'bg-slate-800 p-3 rounded mt-2' },
+                                e('p', { className: 'text-xs text-gray-400' },
+                                    e('strong', { className: 'text-white' }, 'Why always on? '), 
+                                    'The reader needs a stable field to detect when a tag enters. The tag has no battery - it gets its power from YOUR antenna\'s field. If the field isn\'t there, the tag is just inert plastic.'
+                                )
+                            )
+                        ),
+
+                        e('div', { className: 'bg-green-900 bg-opacity-30 p-4 rounded border border-green-700 space-y-3' },
+                            e('h4', { className: 'text-green-400 font-semibold mb-2' }, 'What Happens When a Tag Gets Close'),
+                            
+                            // Canvas visualization
+                            e('div', { className: 'bg-slate-800 p-4 rounded mb-4' },
+                                e('canvas', {
+                                    ref: howItWorksCanvasRef,
+                                    width: 700,
+                                    height: 350,
+                                    className: 'w-full border border-slate-700 rounded'
+                                }),
+                                
+                                // Step controls
+                                e('div', { className: 'flex gap-2 mt-4 justify-center flex-wrap' },
+                                    e('button', {
+                                        onClick: () => setHowItWorksStep(0),
+                                        className: `px-4 py-2 rounded text-sm font-semibold transition-colors ${
+                                            howItWorksStep === 0 ? 'bg-blue-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-gray-300'
+                                        }`
+                                    }, 'Continuous Field'),
+                                    e('button', {
+                                        onClick: () => setHowItWorksStep(1),
+                                        className: `px-4 py-2 rounded text-sm font-semibold transition-colors ${
+                                            howItWorksStep === 1 ? 'bg-blue-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-gray-300'
+                                        }`
+                                    }, 'Step 1: Power Up'),
+                                    e('button', {
+                                        onClick: () => setHowItWorksStep(2),
+                                        className: `px-4 py-2 rounded text-sm font-semibold transition-colors ${
+                                            howItWorksStep === 2 ? 'bg-blue-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-gray-300'
+                                        }`
+                                    }, 'Step 2: Field Loading'),
+                                    e('button', {
+                                        onClick: () => setHowItWorksStep(3),
+                                        className: `px-4 py-2 rounded text-sm font-semibold transition-colors ${
+                                            howItWorksStep === 3 ? 'bg-blue-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-gray-300'
+                                        }`
+                                    }, 'Step 3: Modulation')
+                                )
+                            ),
+                            
+                            e('ol', { className: 'text-sm text-gray-300 space-y-2 list-decimal list-inside' },
+                                e('li', null,
+                                    e('strong', null, 'Tag powers up: '),
+                                    'The tag\'s coil picks up energy from your field (like wireless charging). A tiny capacitor in the tag charges up and powers its chip.'
+                                ),
+                                e('li', null,
+                                    e('strong', null, 'Tag "loads" the field: '),
+                                    'The powered-up tag creates its own small magnetic field that interferes with yours. Your reader detects this interference as a change in current or voltage.'
+                                ),
+                                e('li', null,
+                                    e('strong', null, 'Tag talks back: '),
+                                    'The tag chip turns its internal load on/off rapidly, which creates detectable changes in your field. This is how the tag sends its ID to your reader - by modulating (disturbing) your field.'
+                                )
+                            ),
+                            e('div', { className: 'bg-slate-800 p-3 rounded mt-2' },
+                                e('p', { className: 'text-xs text-gray-400' },
+                                    e('strong', { className: 'text-white' }, 'Key point: '), 
+                                    'The tag never transmits its own signal. It just reflects/modulates YOUR signal back to you, like shouting in a canyon and listening for the echo.'
+                                )
+                            )
+                        ),
+
+                        e('div', { className: 'bg-purple-900 bg-opacity-30 p-4 rounded border border-purple-700 space-y-3' },
+                            e('h4', { className: 'text-purple-400 font-semibold mb-2' }, 'Different Tag Types: What\'s the Difference?'),
+                            e('div', { className: 'text-sm text-gray-300 space-y-2' },
+                                e('div', null,
+                                    e('strong', { className: 'text-white' }, 'MIFARE Classic / MIFARE Plus:'),
+                                    e('p', { className: 'text-xs text-gray-400 mt-1' }, 'Proprietary NXP protocol. Memory organized in sectors with authentication. Common in access control, public transit. Your reader needs to specifically support MIFARE commands.')
+                                ),
+                                e('div', null,
+                                    e('strong', { className: 'text-white' }, 'NTAG / MIFARE Ultralight:'),
+                                    e('p', { className: 'text-xs text-gray-400 mt-1' }, 'Simpler, lower-cost tags. Less memory, no sector authentication. Common in marketing/NFC stickers. Easier to read/write.')
+                                ),
+                                e('div', null,
+                                    e('strong', { className: 'text-white' }, 'ISO 14443 Type A vs Type B:'),
+                                    e('p', { className: 'text-xs text-gray-400 mt-1' }, 'Different modulation schemes at the physical layer. Type A (MIFARE, NTAG) uses different bit encoding than Type B. Your IC needs to support the type you want to read.')
+                                ),
+                                e('div', null,
+                                    e('strong', { className: 'text-white' }, 'ISO 15693 (Vicinity Cards):'),
+                                    e('p', { className: 'text-xs text-gray-400 mt-1' }, 'Longer range (up to 1 meter) but slower data rate. Different frequency modulation. Needs IC support for this protocol.')
+                                )
+                            ),
+                            e('div', { className: 'bg-slate-800 p-3 rounded mt-2' },
+                                e('p', { className: 'text-xs text-gray-400' },
+                                    e('strong', { className: 'text-white' }, 'Support perspective: '),
+                                    'If customer says "it works with MIFARE but not NTAG", it\'s likely a firmware/protocol issue, NOT an antenna problem. If it doesn\'t work with ANY tags, then suspect antenna/matching.'
+                                )
+                            )
+                        ),
+
+                        e('div', { className: 'bg-yellow-900 bg-opacity-30 p-4 rounded border border-yellow-700 space-y-3' },
+                            e('h4', { className: 'text-yellow-400 font-semibold mb-2' }, 'Antenna Size vs Tag Size: Why It Matters'),
+                            
+                            // Canvas visualization
+                            e('div', { className: 'bg-slate-800 p-4 rounded mb-4' },
+                                e('canvas', {
+                                    ref: antennaSizeCanvasRef,
+                                    width: 700,
+                                    height: 280,
+                                    className: 'w-full border border-slate-700 rounded'
+                                }),
+                                
+                                // Size controls
+                                e('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4 mt-4' },
+                                    e('div', null,
+                                        e('label', { className: 'text-sm text-gray-400 block mb-2' }, 
+                                            `Reader Antenna Diameter: ${readerAntennaSize}mm`
+                                        ),
+                                        e('input', {
+                                            type: 'range',
+                                            min: 20,
+                                            max: 100,
+                                            step: 5,
+                                            value: readerAntennaSize,
+                                            onChange: (evt) => setReaderAntennaSize(parseFloat(evt.target.value)),
+                                            className: 'w-full'
+                                        })
+                                    ),
+                                    e('div', null,
+                                        e('label', { className: 'text-sm text-gray-400 block mb-2' }, 
+                                            `Tag Size: ${tagSize}mm`
+                                        ),
+                                        e('input', {
+                                            type: 'range',
+                                            min: 15,
+                                            max: 85,
+                                            step: 5,
+                                            value: tagSize,
+                                            onChange: (evt) => setTagSize(parseFloat(evt.target.value)),
+                                            className: 'w-full'
+                                        })
+                                    )
+                                ),
+                                
+                                // Preset buttons
+                                e('div', { className: 'flex gap-2 mt-4 flex-wrap' },
+                                    e('button', {
+                                        onClick: () => { setReaderAntennaSize(50); setTagSize(50); },
+                                        className: 'px-3 py-1 rounded text-xs bg-slate-700 hover:bg-slate-600 text-gray-300'
+                                    }, 'Reader 50mm + Card 50mm'),
+                                    e('button', {
+                                        onClick: () => { setReaderAntennaSize(50); setTagSize(25); },
+                                        className: 'px-3 py-1 rounded text-xs bg-slate-700 hover:bg-slate-600 text-gray-300'
+                                    }, 'Reader 50mm + Fob 25mm'),
+                                    e('button', {
+                                        onClick: () => { setReaderAntennaSize(25); setTagSize(50); },
+                                        className: 'px-3 py-1 rounded text-xs bg-slate-700 hover:bg-slate-600 text-gray-300'
+                                    }, 'Reader 25mm + Card 50mm'),
+                                    e('button', {
+                                        onClick: () => { setReaderAntennaSize(85); setTagSize(85); },
+                                        className: 'px-3 py-1 rounded text-xs bg-slate-700 hover:bg-slate-600 text-gray-300'
+                                    }, 'Reader 85mm + Card 85mm')
+                                )
+                            ),
+                            
+                            e('div', { className: 'text-sm text-gray-300 space-y-2' },
+                                e('p', null,
+                                    e('strong', { className: 'text-white' }, 'Coupling efficiency:'),
+                                    ' Think of it like overlapping gears. If your reader antenna is 50mm diameter and the tag is also ~50mm, they couple well - lots of magnetic field lines thread through both coils.'
+                                ),
+                                e('div', { className: 'bg-slate-800 p-3 rounded space-y-2' },
+                                    e('div', null,
+                                        e('strong', { className: 'text-green-400' }, 'Big reader + big tag:'),
+                                        e('span', { className: 'text-xs text-gray-400' }, ' Best coupling, longest range. Card-sized tags work great.')
+                                    ),
+                                    e('div', null,
+                                        e('strong', { className: 'text-orange-400' }, 'Big reader + tiny tag (key fob):'),
+                                        e('span', { className: 'text-xs text-gray-400' }, ' Harder to couple. Small tag coil catches less of your field. Need higher field strength.')
+                                    ),
+                                    e('div', null,
+                                        e('strong', { className: 'text-red-400' }, 'Small reader + big tag:'),
+                                        e('span', { className: 'text-xs text-gray-400' }, ' Generally works but range limited. Your small antenna can\'t create a strong field over the large tag area.')
+                                    )
+                                ),
+                                e('p', { className: 'text-xs text-gray-400 mt-2' },
+                                    e('strong', { className: 'text-white' }, 'Rule of thumb: '),
+                                    'Reader antenna should be at least 70-80% of the smallest tag size you need to reliably detect. Trying to read a credit card (85x54mm) with a 25mm antenna? That\'s going to be challenging.'
+                                )
+                            )
+                        ),
+
+                        e('div', { className: 'bg-slate-700 p-4 rounded' },
+                            e('h4', { className: 'text-white font-semibold mb-2' }, 'Now You\'re Ready for the Technical Stuff'),
+                            e('p', { className: 'text-sm text-gray-300' },
+                                'With this foundation, the following sections on resonance, Q factor, and impedance matching will make sense. They\'re all about optimizing that continuous 13.56 MHz field so you can:',
+                                e('ul', { className: 'list-disc list-inside ml-3 mt-2 space-y-1 text-xs text-gray-400' },
+                                    e('li', null, 'Generate enough field strength to power tags'),
+                                    e('li', null, 'Detect the tiny disturbances when tags respond'),
+                                    e('li', null, 'Do it efficiently without wasting power or causing interference')
+                                )
+                            )
+                        )
+                    )
+                },
+                
+                resonance: {
+                    title: "Resonance (LC Tuning)",
+                    icon: e(ActivityIcon, { size: 24, className: "text-purple-400" }),
+                    content: e('div', { className: 'space-y-4' },
+                        e('p', { className: 'text-gray-300' }, 
+                            'Now that you understand the continuous 13.56 MHz field, let\'s talk about making it efficient. Your antenna coil naturally resists this high-frequency current (we call this "inductive reactance"). To maximize the field strength without burning power, we add a capacitor that cancels this resistance.'
+                        ),
+                        e('div', { className: 'bg-slate-700 p-4 rounded space-y-2' },
+                            e('p', { className: 'text-sm text-gray-300' },
+                                e('strong', { className: 'text-white' }, 'Think of it like pushing a swing:'),
+                                ' If you push at random times, you waste energy. But if you push at exactly the right rhythm (the swing\'s natural frequency), you get maximum height with minimal effort. That\'s resonance.'
+                            ),
+                            e('p', { className: 'text-xs text-gray-400 mt-2' },
+                                'For NFC, we tune the antenna + capacitor to resonate at exactly 13.56 MHz. When resonant, the current flows easily, creating a strong field without the IC having to work too hard.'
+                            )
+                        ),
+                        
+                        // Interactive tuning visualization
+                        e('div', { className: 'bg-slate-800 p-4 rounded border border-purple-700' },
+                            e('h4', { className: 'text-purple-400 font-semibold mb-3' }, 'Interactive: See How Tuning Affects Field Strength'),
+                            e('canvas', {
+                                ref: resonanceCanvasRef,
+                                width: 600,
+                                height: 300,
+                                className: 'w-full border border-slate-700 rounded mb-3'
+                            }),
+                            e('div', { className: 'space-y-2' },
+                                e('label', { className: 'text-sm text-gray-400 block' }, 
+                                    `Tuning Capacitor: ${tuningCapacitor}pF`
+                                ),
+                                e('input', {
+                                    type: 'range',
+                                    min: 50,
+                                    max: 150,
+                                    step: 1,
+                                    value: tuningCapacitor,
+                                    onChange: (evt) => setTuningCapacitor(parseFloat(evt.target.value)),
+                                    className: 'w-full'
+                                }),
+                                e('div', { className: 'flex gap-2 mt-2 flex-wrap' },
+                                    e('button', {
+                                        onClick: () => setTuningCapacitor(parseFloat(capValue) - 20),
+                                        className: 'px-3 py-1 rounded text-xs bg-red-700 hover:bg-red-600 text-white'
+                                    }, 'Way Too Low'),
+                                    e('button', {
+                                        onClick: () => setTuningCapacitor(parseFloat(capValue) - 5),
+                                        className: 'px-3 py-1 rounded text-xs bg-orange-700 hover:bg-orange-600 text-white'
+                                    }, 'Slightly Low'),
+                                    e('button', {
+                                        onClick: () => setTuningCapacitor(parseFloat(capValue)),
+                                        className: 'px-3 py-1 rounded text-xs bg-green-700 hover:bg-green-600 text-white'
+                                    }, 'Perfect Resonance'),
+                                    e('button', {
+                                        onClick: () => setTuningCapacitor(parseFloat(capValue) + 5),
+                                        className: 'px-3 py-1 rounded text-xs bg-orange-700 hover:bg-orange-600 text-white'
+                                    }, 'Slightly High'),
+                                    e('button', {
+                                        onClick: () => setTuningCapacitor(parseFloat(capValue) + 20),
+                                        className: 'px-3 py-1 rounded text-xs bg-red-700 hover:bg-red-600 text-white'
+                                    }, 'Way Too High')
+                                )
+                            ),
+                            e('p', { className: 'text-xs text-gray-400 mt-3' },
+                                'Move the slider or click buttons to see how detuning affects field strength and reading range. When resonant, you get maximum field with minimum wasted power!'
+                            )
+                        ),
+                        
+                        e('div', { className: 'bg-blue-900 bg-opacity-30 p-4 rounded border border-blue-700 space-y-3' },
+                            e('h3', { className: 'text-blue-400 font-semibold' }, 'Antenna Inductance Calculator'),
+                            e('p', { className: 'text-xs text-gray-300 mb-2' }, 'Use this to estimate the series capacitor value you need for resonance:'),
+                            e('div', { className: 'space-y-3' },
+                                e('div', null,
+                                    e('label', { className: 'text-sm text-gray-400 block mb-1' }, 'Diameter (mm):'),
+                                    e('input', {
+                                        type: 'range', min: 20, max: 100, step: 1,
+                                        value: antennaDiameter,
+                                        onChange: (evt) => setAntennaDiameter(parseFloat(evt.target.value)),
+                                        className: 'w-full'
+                                    }),
+                                    e('span', { className: 'text-sm text-gray-300' }, `${antennaDiameter}mm`)
+                                ),
+                                e('div', null,
+                                    e('label', { className: 'text-sm text-gray-400 block mb-1' }, 'Number of turns:'),
+                                    e('input', {
+                                        type: 'range', min: 1, max: 10, step: 1,
+                                        value: antennaTurns,
+                                        onChange: (evt) => setAntennaTurns(parseFloat(evt.target.value)),
+                                        className: 'w-full'
+                                    }),
+                                    e('span', { className: 'text-sm text-gray-300' }, `${antennaTurns} turns`)
+                                )
+                            ),
+                            e('div', { className: 'bg-slate-800 p-3 rounded mt-3 space-y-1' },
+                                e('p', { className: 'text-sm' },
+                                    e('strong', { className: 'text-green-400' }, 'Inductance: '),
+                                    e('span', { className: 'font-mono' }, `${antennaData.inductance.toFixed(2)} µH`)
+                                ),
+                                e('p', { className: 'text-sm' },
+                                    e('strong', { className: 'text-green-400' }, 'Series Cap @ 13.56 MHz: '),
+                                    e('span', { className: 'font-mono' }, `${capValue} pF`)
+                                )
+                            )
+                        ),
+                        e('div', { className: 'bg-yellow-900 bg-opacity-30 p-3 rounded border border-yellow-700' },
+                            e('p', { className: 'text-sm text-gray-300' },
+                                e('strong', null, 'Reality check:'), ' This gives you a starting value. Real antenna inductance depends on PCB layout, metal nearby, etc. Always measure!'
+                            )
+                        )
+                    )
+                },
+                
+                qfactor: {
+                    title: "Q Factor & Bandwidth",
+                    icon: e(ActivityIcon, { size: 24, className: "text-green-400" }),
+                    content: e('div', { className: 'space-y-4' },
+                        e('p', { className: 'text-gray-300' },
+                            'Q factor controls the bandwidth. Higher Q = narrower bandwidth = more range but less tolerance to component variations.'
+                        ),
+                        
+                        // Q factor trade-off visualization
+                        e('div', { className: 'bg-slate-800 p-4 rounded border border-green-700 mb-4' },
+                            e('h4', { className: 'text-green-400 font-semibold mb-3' }, 'The Trade-off: Range vs. Reliability'),
+                            e('canvas', {
+                                ref: qFactorVisualizationCanvasRef,
+                                width: 700,
+                                height: 350,
+                                className: 'w-full border border-slate-700 rounded'
+                            }),
+                            e('p', { className: 'text-xs text-gray-400 mt-3' },
+                                'High Q gives you a stronger field and longer range, but makes the system sensitive to variations. Low Q is more forgiving and stable, but limits your range. Choose based on your requirements!'
+                            )
+                        ),
+                        
+                        e('div', { className: 'bg-slate-700 p-4 rounded space-y-3' },
+                            e('label', { className: 'text-sm text-gray-400 block' }, `Q Factor: ${qFactor}`),
+                            e('input', {
+                                type: 'range', min: 5, max: 50, step: 1,
+                                value: qFactor,
+                                onChange: (evt) => setQFactor(parseFloat(evt.target.value)),
+                                className: 'w-full'
+                            }),
+                            e('p', { className: 'text-sm text-gray-400 mt-2' }, 
+                                `Bandwidth: ${getBandwidth(qFactor, frequency).toFixed(3)} MHz`
+                            )
+                        ),
+                        e('div', { className: 'bg-blue-900 bg-opacity-30 p-4 rounded border border-blue-700 space-y-2' },
+                            e('p', { className: 'text-sm text-gray-300' },
+                                e('strong', null, 'High Q (narrow bandwidth):')
+                            ),
+                            e('ul', { className: 'text-xs text-gray-400 list-disc list-inside ml-3 space-y-1' },
+                                e('li', null, 'More energy stored → stronger field → longer range'),
+                                e('li', null, 'Very sensitive to component values (need ±1-2% caps)'),
+                                e('li', null, 'Sensitive to detuning (metal objects, temperature)')
+                            )
+                        ),
+                        e('div', { className: 'bg-green-900 bg-opacity-30 p-4 rounded border border-green-700 space-y-2' },
+                            e('p', { className: 'text-sm text-gray-300' },
+                                e('strong', null, 'Lower Q (wider bandwidth):')
+                            ),
+                            e('ul', { className: 'text-xs text-gray-400 list-disc list-inside ml-3 space-y-1' },
+                                e('li', null, 'More forgiving to component tolerances (±5% is okay)'),
+                                e('li', null, 'More stable in varying conditions'),
+                                e('li', null, 'Shorter range (less energy stored)')
+                            )
+                        )
+                    )
+                },
+
+                smithchart: {
+                    title: "Smith Chart for NFC",
+                    icon: e(RadioIcon, { size: 24, className: "text-cyan-400" }),
+                    content: e('div', { className: 'space-y-4' },
+                        e('p', { className: 'text-gray-300' },
+                            'Remember from the Resonance section: you need to tune your capacitor to cancel the antenna\'s inductive reactance. But how do you know if you\'ve done it right? ',
+                            e('strong', null, 'That\'s where the Smith chart comes in.'),
+                            ' It\'s a tool to visualize and verify your tuning using a Vector Network Analyzer (VNA).'
+                        ),
+                        
+                        e('div', { className: 'bg-blue-900 bg-opacity-30 p-4 rounded border border-blue-700' },
+                            e('h4', { className: 'text-blue-400 font-semibold mb-2' }, 'Connecting the Dots: Resonance → Smith Chart'),
+                            e('div', { className: 'text-sm text-gray-300 space-y-2' },
+                                e('p', null,
+                                    e('strong', null, '1. You tune your circuit '), 
+                                    '(adjust C', e('sub', null, 'series'), ') to cancel antenna reactance'
+                                ),
+                                e('p', null,
+                                    e('strong', null, '2. You measure with VNA '), 
+                                    'to see the actual impedance at 13.56 MHz'
+                                ),
+                                e('p', null,
+                                    e('strong', null, '3. VNA shows result on Smith chart '), 
+                                    'which tells you if you\'re resonant or need to adjust'
+                                ),
+                                e('p', null,
+                                    e('strong', null, '4. You iterate '), 
+                                    'until the point is on the horizontal axis (resonant) at your target impedance'
+                                )
+                            )
+                        ),
+                        
+                        // Common NFC measurements visualization
+                        e('div', { className: 'bg-slate-800 p-4 rounded border border-cyan-700' },
+                            e('h4', { className: 'text-cyan-400 font-semibold mb-3' }, 'What Common NFC Measurements Look Like'),
+                            e('canvas', {
+                                ref: smithNFCCanvasRef,
+                                width: 600,
+                                height: 500,
+                                className: 'w-full border border-slate-700 rounded mb-3'
+                            }),
+                            e('div', { className: 'flex gap-2 flex-wrap justify-center' },
+                                e('button', {
+                                    onClick: () => setSmithExampleType('good'),
+                                    className: `px-4 py-2 rounded text-sm font-semibold transition-colors ${
+                                        smithExampleType === 'good' ? 'bg-green-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-gray-300'
+                                    }`
+                                }, '✓ Good Tuning'),
+                                e('button', {
+                                    onClick: () => setSmithExampleType('inductive'),
+                                    className: `px-4 py-2 rounded text-sm font-semibold transition-colors ${
+                                        smithExampleType === 'inductive' ? 'bg-orange-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-gray-300'
+                                    }`
+                                }, '⚠ Too Inductive'),
+                                e('button', {
+                                    onClick: () => setSmithExampleType('capacitive'),
+                                    className: `px-4 py-2 rounded text-sm font-semibold transition-colors ${
+                                        smithExampleType === 'capacitive' ? 'bg-red-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-gray-300'
+                                    }`
+                                }, '⚠ Too Capacitive'),
+                                e('button', {
+                                    onClick: () => setSmithExampleType('mismatch'),
+                                    className: `px-4 py-2 rounded text-sm font-semibold transition-colors ${
+                                        smithExampleType === 'mismatch' ? 'bg-red-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-gray-300'
+                                    }`
+                                }, '✗ Bad Match')
+                            ),
+                            e('p', { className: 'text-xs text-gray-400 mt-3' },
+                                'Click buttons to see different measurement scenarios. Notice how the point position tells you exactly what to adjust!'
+                            )
+                        ),
+                        
+                        // Interactive tuning simulator
+                        e('div', { className: 'bg-slate-800 p-4 rounded border border-purple-700' },
+                            e('h4', { className: 'text-purple-400 font-semibold mb-3' }, 'Interactive: Tune Your Antenna on the Smith Chart'),
+                            e('p', { className: 'text-sm text-gray-300 mb-3' },
+                                'This simulates what you see on a VNA as you adjust C', e('sub', null, 'series'), '. Watch how the impedance point moves as you change the capacitor value!'
+                            ),
+                            e('canvas', {
+                                ref: smithTuningCanvasRef,
+                                width: 600,
+                                height: 400,
+                                className: 'w-full border border-slate-700 rounded mb-3'
+                            }),
+                            e('div', { className: 'space-y-2' },
+                                e('label', { className: 'text-sm text-gray-400 block' }, 
+                                    `Series Capacitor: ${tuningCapacitor}pF`
+                                ),
+                                e('input', {
+                                    type: 'range',
+                                    min: 50,
+                                    max: 150,
+                                    step: 1,
+                                    value: tuningCapacitor,
+                                    onChange: (evt) => setTuningCapacitor(parseFloat(evt.target.value)),
+                                    className: 'w-full'
+                                }),
+                                e('p', { className: 'text-xs text-gray-400' },
+                                    'The faint trail shows the path the impedance takes as you change capacitance. Goal: Get the point onto the horizontal axis (resonant)!'
+                                )
+                            )
+                        ),
+                        
+                        e('div', { className: 'bg-slate-700 p-4 rounded space-y-3' },
+                            e('h4', { className: 'text-white font-semibold' }, 'Quick Guide to Reading NFC on Smith Chart'),
+                            e('div', { className: 'space-y-3 text-sm' },
+                                e('div', null,
+                                    e('div', { className: 'text-white font-semibold' }, 'Point in UPPER half'),
+                                    e('div', { className: 'text-gray-300 ml-3 mt-1 text-xs' },
+                                        e('strong', null, 'Status:'), ' Inductive (X > 0)',
+                                        e('br'),
+                                        e('strong', null, 'Problem:'), ' Not enough series capacitance',
+                                        e('br'),
+                                        e('strong', null, 'Solution:'), ' Increase C', e('sub', null, 'series'), ' to move point DOWN toward horizontal axis'
+                                    )
+                                ),
+                                e('div', null,
+                                    e('div', { className: 'text-white font-semibold' }, 'Point in LOWER half'),
+                                    e('div', { className: 'text-gray-300 ml-3 mt-1 text-xs' },
+                                        e('strong', null, 'Status:'), ' Capacitive (X < 0)',
+                                        e('br'),
+                                        e('strong', null, 'Problem:'), ' Too much series capacitance',
+                                        e('br'),
+                                        e('strong', null, 'Solution:'), ' Decrease C', e('sub', null, 'series'), ' to move point UP toward horizontal axis'
+                                    )
+                                ),
+                                e('div', null,
+                                    e('div', { className: 'text-white font-semibold' }, 'Point on horizontal AXIS'),
+                                    e('div', { className: 'text-gray-300 ml-3 mt-1 text-xs' },
+                                        e('strong', null, 'Status:'), ' Resonant! (X ≈ 0)',
+                                        e('br'),
+                                        e('strong', null, 'Good:'), ' C', e('sub', null, 'series'), ' is correct',
+                                        e('br'),
+                                        e('strong', null, 'If left of center:'), ' Low Z is normal for NFC (3-10Ω typical)'
+                                    )
+                                ),
+                                e('div', null,
+                                    e('div', { className: 'text-white font-semibold' }, 'Point far from CENTER'),
+                                    e('div', { className: 'text-gray-300 ml-3 mt-1 text-xs' },
+                                        e('strong', null, 'Problem:'), ' Large mismatch (high |Γ|)',
+                                        e('br'),
+                                        e('strong', null, 'Solution:'), ' Review entire matching network',
+                                        e('br'),
+                                        e('strong', null, 'Check:'), ' Component values, solder joints, antenna breaks'
+                                    )
+                                )
+                            )
+                        ),
+                        e('div', { className: 'bg-green-900 bg-opacity-30 p-4 rounded border border-green-700' },
+                            e('h4', { className: 'text-green-400 font-semibold mb-2' }, 'Real-World VNA Measurement Process'),
+                            e('ol', { className: 'text-sm text-gray-300 space-y-2 list-decimal list-inside' },
+                                e('li', null, 'Connect VNA to antenna terminals (where IC connects)'),
+                                e('li', null, 'Calibrate VNA to 50Ω (use cal kit)'),
+                                e('li', null, 'Set frequency span: 10-20 MHz (centered on 13.56 MHz)'),
+                                e('li', null, 'Look at S11 on Smith chart - note position'),
+                                e('li', null, 'Marker at exactly 13.56 MHz - read impedance'),
+                                e('li', null, 'Adjust C', e('sub', null, 'series'), ' components based on position'),
+                                e('li', null, 'Re-measure until point is on horizontal axis at target impedance')
+                            )
+                        ),
+                        e('div', { className: 'bg-yellow-900 bg-opacity-30 p-3 rounded border border-yellow-700 text-sm' },
+                            e('p', { className: 'text-gray-300' },
+                                e('strong', null, 'Remember:'), ' For NFC, you\'re often NOT trying to reach the center (50Ω). Many ICs want low impedance (3-10Ω). The Smith chart shows you if you\'re resonant (on horizontal axis) and what the impedance magnitude is. That\'s what matters!'
+                            )
+                        ),
+                        e('div', { className: 'bg-blue-900 bg-opacity-30 p-3 rounded border border-blue-700 text-sm' },
+                            e('p', { className: 'text-gray-300' },
+                                e('strong', { className: 'text-blue-400' }, 'Support Tip: '), 
+                                'If a customer says "VNA shows I\'m not at 50Ω", that\'s usually FINE for NFC! What matters is: (1) Are they on the horizontal axis (resonant)? (2) Is the impedance magnitude what their IC datasheet specifies? If yes to both, they\'re good!'
+                            )
+                        )
+                    )
+                },
+
+                debugging: {
+                    title: "Common Issues & What They Mean",
+                    icon: e(AlertTriangleIcon, { size: 24, className: "text-orange-400" }),
+                    content: e('div', { className: 'space-y-4' },
+                        e('p', { className: 'text-gray-300' },
+                            e('strong', null, 'When things don\'t work,'), ' understanding the concepts helps you debug.'
+                        ),
+                        e('div', { className: 'space-y-3' },
+                            e('div', { className: 'bg-slate-700 p-4 rounded' },
+                                e('h4', { className: 'text-red-400 font-semibold mb-2' }, 'Problem: No detection at all'),
+                                e('div', { className: 'text-sm text-gray-300 space-y-2' },
+                                    e('div', null, e('strong', { className: 'text-white' }, 'Likely causes:')),
+                                    e('ul', { className: 'text-gray-400 list-disc list-inside ml-3 space-y-1 text-xs' },
+                                        e('li', null, 'Not resonant - C', e('sub', null, 'series'), ' value wrong for your antenna'),
+                                        e('li', null, 'Antenna broken - measure DC resistance (should be <10Ω)'),
+                                        e('li', null, 'Wrong frequency - check oscillator is 27.12 MHz')
+                                    ),
+                                    e('div', { className: 'bg-slate-800 p-2 rounded text-xs mt-2' },
+                                        e('strong', { className: 'text-green-400' }, 'Debug:'), ' Measure antenna inductance. Recalculate C', e('sub', null, 'series'), '. Try ±20% values.'
+                                    )
+                                )
+                            ),
+                            e('div', { className: 'bg-slate-700 p-4 rounded' },
+                                e('h4', { className: 'text-orange-400 font-semibold mb-2' }, 'Problem: Very short range (<1cm)'),
+                                e('div', { className: 'text-sm text-gray-300 space-y-2' },
+                                    e('div', null, e('strong', { className: 'text-white' }, 'Likely causes:')),
+                                    e('ul', { className: 'text-gray-400 list-disc list-inside ml-3 space-y-1 text-xs' },
+                                        e('li', null, 'Q factor too low - too much damping'),
+                                        e('li', null, 'EMC filter attenuating signal'),
+                                        e('li', null, 'IC output power set too low in firmware')
+                                    ),
+                                    e('div', { className: 'bg-slate-800 p-2 rounded text-xs mt-2' },
+                                        e('strong', { className: 'text-green-400' }, 'Debug:'), ' Remove/reduce damping resistor. Check C', e('sub', null, 'parallel'), ' value. Verify IC register settings.'
+                                    )
+                                )
+                            ),
+                            e('div', { className: 'bg-slate-700 p-4 rounded' },
+                                e('h4', { className: 'text-yellow-400 font-semibold mb-2' }, 'Problem: Inconsistent reads'),
+                                e('div', { className: 'text-sm text-gray-300 space-y-2' },
+                                    e('div', null, e('strong', { className: 'text-white' }, 'Likely causes:')),
+                                    e('ul', { className: 'text-gray-400 list-disc list-inside ml-3 space-y-1 text-xs' },
+                                        e('li', null, 'Q factor too high - bandwidth too narrow'),
+                                        e('li', null, 'Component tolerances too loose (use ±5% or better)'),
+                                        e('li', null, 'Temperature affecting X7R capacitors (use NPO/C0G!)'),
+                                        e('li', null, 'Metal objects nearby detuning antenna')
+                                    ),
+                                    e('div', { className: 'bg-slate-800 p-2 rounded text-xs mt-2' },
+                                        e('strong', { className: 'text-green-400' }, 'Debug:'), ' Add damping resistor (10-22Ω). Replace all caps with NPO. Test away from metal.'
+                                    )
+                                )
+                            )
+                        ),
+                        e('div', { className: 'bg-blue-900 bg-opacity-30 p-4 rounded border border-blue-700' },
+                            e('h4', { className: 'text-blue-400 font-semibold mb-2' }, 'General Debugging Approach'),
+                            e('ol', { className: 'text-sm text-gray-300 space-y-2 list-decimal list-inside' },
+                                e('li', null, 'Test basic functionality (does it work at all?)'),
+                                e('li', null, 'Measure antenna parameters (L, R, Q)'),
+                                e('li', null, 'Verify resonance frequency (use VNA or sweep test)'),
+                                e('li', null, 'Adjust Q based on observed symptoms'),
+                                e('li', null, 'Document what works for your design')
+                            )
+                        )
+                    )
+                }
+            };
+
+            return e('div', { className: 'min-h-screen bg-slate-900 text-white' },
+                e('div', { className: 'max-w-7xl mx-auto px-6 py-8' },
+                    e('div', { className: 'grid grid-cols-1 lg:grid-cols-3 gap-6' },
+                        // Left sidebar
+                        e('div', { className: 'lg:col-span-1' },
+                            e('div', { className: 'bg-slate-800 rounded-lg p-4 sticky top-4' },
+                                e('h3', { className: 'text-lg font-bold mb-4' }, 'Select a Concept'),
+                                e('div', { className: 'space-y-2' },
+                                    Object.entries(concepts).map(([key, data]) =>
+                                        e('button', {
+                                            key,
+                                            onClick: () => setConcept(key),
+                                            className: `w-full p-3 rounded text-left transition-colors flex items-center gap-3 ${
+                                                concept === key ? 'bg-blue-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-gray-300'
+                                            }`
+                                        },
+                                            data.icon,
+                                            e('span', { className: 'text-sm font-semibold' }, data.title)
+                                        )
+                                    )
+                                )
+                            )
+                        ),
+                        // Main content
+                        e('div', { className: 'lg:col-span-2 space-y-6' },
+                            e('div', { className: 'bg-slate-800 rounded-lg p-6' },
+                                e('div', { className: 'flex items-center gap-3 mb-6' },
+                                    concepts[concept].icon,
+                                    e('h2', { className: 'text-2xl font-bold' }, concepts[concept].title)
+                                ),
+                                concepts[concept].content
+                            ),
+                            concept === 'qfactor' && e('div', { className: 'bg-slate-800 rounded-lg p-6' },
+                                e('h3', { className: 'text-xl font-bold mb-4' }, 'Frequency Response Visualization'),
+                                e('canvas', {
+                                    ref: canvasRef,
+                                    width: 600,
+                                    height: 300,
+                                    className: 'w-full border border-slate-700 rounded'
+                                }),
+                                e('p', { className: 'text-sm text-gray-400 mt-3' },
+                                    'This shows how the antenna system responds to different frequencies. The peak is at 13.56 MHz. The width of the peak is the bandwidth, controlled by Q factor.'
+                                )
+                            )
+                        )
+                    )
+                )
+            );
+        };
+
+        // ============================================
+        // SMITH CHART SECTION
+        // ============================================
+        const SmithChartTutorial = () => {
+            const [smithStep, setSmithStep] = useState(0);
+            const [impedance, setImpedance] = useState({ r: 50, x: 0 });
+            const canvasRef = useRef(null);
+            const Z0 = 50;
+
+            const impedanceToGamma = (r, x) => {
+                const numerator_re = r - Z0;
+                const numerator_im = x;
+                const denominator_re = r + Z0;
+                const denominator_im = x;
+                
+                const denom_mag_sq = denominator_re * denominator_re + denominator_im * denominator_im;
+                const gamma_re = (numerator_re * denominator_re + numerator_im * denominator_im) / denom_mag_sq;
+                const gamma_im = (numerator_im * denominator_re - numerator_re * denominator_im) / denom_mag_sq;
+                
+                return { re: gamma_re, im: gamma_im };
+            };
+
+            const gammaToCanvas = (gamma, centerX, centerY, radius) => {
+                return {
+                    x: centerX + gamma.re * radius,
+                    y: centerY - gamma.im * radius
+                };
+            };
+
+            const gammaToImpedance = (gamma) => {
+                const denom_re = 1 - gamma.re;
+                const denom_im = -gamma.im;
+                const numer_re = 1 + gamma.re;
+                const numer_im = gamma.im;
+                
+                const denom_mag_sq = denom_re * denom_re + denom_im * denom_im;
+                const z_re = ((numer_re * denom_re + numer_im * denom_im) / denom_mag_sq) * Z0;
+                const z_im = ((numer_im * denom_re - numer_re * denom_im) / denom_mag_sq) * Z0;
+                
+                return { r: z_re, x: z_im };
+            };
+
+            const drawSmithChart = () => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                
+                const ctx = canvas.getContext('2d');
+                const centerX = canvas.width / 2;
+                const centerY = canvas.height / 2;
+                const radius = Math.min(centerX, centerY) - 40;
+                
+                ctx.fillStyle = '#1e293b';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.strokeStyle = '#64748b';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+                ctx.stroke();
+                
+                // Step 0: Explain the circular concept
+                if (smithStep === 0) {
+                    // Draw coordinate system labels
+                    ctx.font = '14px sans-serif';
+                    ctx.fillStyle = '#94a3b8';
+                    ctx.textAlign = 'center';
+                    
+                    // Horizontal axis label
+                    ctx.fillText('Real (Γᵣ)', centerX, centerY + radius + 25);
+                    ctx.fillText('-1', centerX - radius - 20, centerY + 5);
+                    ctx.fillText('0', centerX, centerY + radius + 25);
+                    ctx.fillText('+1', centerX + radius + 20, centerY + 5);
+                    
+                    // Vertical axis label
+                    ctx.save();
+                    ctx.translate(centerX - radius - 30, centerY);
+                    ctx.rotate(-Math.PI / 2);
+                    ctx.fillText('Imaginary (Γᵢ)', 0, 0);
+                    ctx.restore();
+                    
+                    ctx.fillText('+j', centerX + 10, centerY - radius - 10);
+                    ctx.fillText('-j', centerX + 10, centerY + radius + 20);
+                    
+                    // Draw radius indicators
+                    ctx.strokeStyle = '#3b82f6';
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([5, 5]);
+                    
+                    // Show |Γ| = 0.5 circle
+                    ctx.globalAlpha = 0.5;
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, radius * 0.5, 0, 2 * Math.PI);
+                    ctx.stroke();
+                    
+                    ctx.fillStyle = '#3b82f6';
+                    ctx.font = '12px sans-serif';
+                    ctx.fillText('|Γ| = 0.5', centerX + radius * 0.5 * 0.707 + 10, centerY - radius * 0.5 * 0.707 - 10);
+                    
+                    // Show |Γ| = 1 (edge)
+                    ctx.fillText('|Γ| = 1 (Total reflection)', centerX, centerY - radius - 30);
+                    
+                    ctx.globalAlpha = 1.0;
+                    ctx.setLineDash([]);
+                    
+                    // Mark center point
+                    ctx.fillStyle = '#10b981';
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, 8, 0, 2 * Math.PI);
+                    ctx.fill();
+                    ctx.fillStyle = '#fff';
+                    ctx.font = 'bold 10px sans-serif';
+                    ctx.fillText('Γ=0', centerX, centerY + 3);
+                    
+                    ctx.fillStyle = '#10b981';
+                    ctx.font = '12px sans-serif';
+                    ctx.fillText('Perfect Match', centerX, centerY + 25);
+                    ctx.fillText('(Z = Z₀ = 50Ω)', centerX, centerY + 40);
+                    
+                    // Draw example points
+                    const examplePoints = [
+                        { x: 0.3, y: 0.4, label: 'Some mismatch', color: '#fbbf24' },
+                        { x: -0.7, y: 0, label: 'Low impedance', color: '#ef4444' },
+                        { x: 0.9, y: 0, label: 'High impedance', color: '#8b5cf6' }
+                    ];
+                    
+                    examplePoints.forEach(pt => {
+                        const px = centerX + pt.x * radius;
+                        const py = centerY - pt.y * radius;
+                        
+                        ctx.fillStyle = pt.color;
+                        ctx.beginPath();
+                        ctx.arc(px, py, 5, 0, 2 * Math.PI);
+                        ctx.fill();
+                        
+                        ctx.font = '11px sans-serif';
+                        ctx.fillText(pt.label, px, py - 10);
+                    });
+                    
+                    return; // Skip rest of drawing for step 0
+                }
+                
+                ctx.strokeStyle = '#475569';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(centerX - radius, centerY);
+                ctx.lineTo(centerX + radius, centerY);
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY - radius);
+                ctx.lineTo(centerX, centerY + radius);
+                ctx.stroke();
+                
+                if (smithStep >= 2) {
+                    const rValues = [0, 25, 50, 100, 200];
+                    ctx.strokeStyle = '#3b82f6';
+                    ctx.lineWidth = 1;
+                    ctx.globalAlpha = 0.4;
+                    
+                    rValues.forEach(r => {
+                        if (r === 0) return;
+                        const centerR = (Z0 * radius) / (Z0 + r);
+                        const radiusR = (Z0 * radius) / (Z0 + r);
+                        
+                        ctx.beginPath();
+                        ctx.arc(centerX + centerR, centerY, radiusR, 0, 2 * Math.PI);
+                        ctx.stroke();
+                    });
+                }
+                
+                if (smithStep >= 3) {
+                    const xValues = [-200, -100, -50, -25, -10, 10, 25, 50, 100, 200];
+                    ctx.strokeStyle = '#10b981';
+                    
+                    xValues.forEach(x => {
+                        const centerReactX = centerX + radius;
+                        const centerReactY = centerY + (Z0 * radius) / x;
+                        const radiusReact = Math.abs((Z0 * radius) / x);
+                        
+                        ctx.beginPath();
+                        ctx.arc(centerReactX, centerReactY, radiusReact, -Math.PI / 2, Math.PI / 2, x > 0);
+                        ctx.stroke();
+                    });
+                }
+                
+                ctx.globalAlpha = 1.0;
+                
+                ctx.fillStyle = '#fbbf24';
+                ctx.fillRect(centerX - 4, centerY - 4, 8, 8);
+                
+                if (smithStep >= 4) {
+                    const gamma = impedanceToGamma(impedance.r, impedance.x);
+                    const point = gammaToCanvas(gamma, centerX, centerY, radius);
+                    
+                    ctx.fillStyle = '#ef4444';
+                    ctx.beginPath();
+                    ctx.arc(point.x, point.y, 6, 0, 2 * Math.PI);
+                    ctx.fill();
+                    
+                    const gammaMag = Math.sqrt(gamma.re * gamma.re + gamma.im * gamma.im);
+                    const vswr = (1 + gammaMag) / (1 - gammaMag);
+                    
+                    ctx.strokeStyle = '#8b5cf6';
+                    ctx.lineWidth = 1.5;
+                    ctx.globalAlpha = 0.3;
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, gammaMag * radius, 0, 2 * Math.PI);
+                    ctx.stroke();
+                    ctx.globalAlpha = 1.0;
+                }
+            };
+
+            useEffect(() => {
+                drawSmithChart();
+            }, [smithStep, impedance]);
+
+            const stepContent = [
+                {
+                    title: "Why is it Circular? (Understanding the Basics)",
+                    description: "If you're used to regular XY charts, the Smith chart looks strange. Let's understand why it's circular.",
+                    details: [
+                        {
+                            title: "Traditional XY Chart Problem",
+                            text: "In a normal XY chart, you'd plot Resistance (R) on X-axis and Reactance (X) on Y-axis. Problem: impedance can go to infinity! You'd need an infinitely large chart."
+                        },
+                        {
+                            title: "Smith Chart Solution: Plot Reflection Instead",
+                            text: "Instead of plotting impedance directly, the Smith chart plots the REFLECTION COEFFICIENT (Γ). Γ tells you how much signal bounces back. Γ is ALWAYS between -1 and +1, so it fits in a unit circle."
+                        },
+                        {
+                            title: "What the Axes Mean",
+                            text: "• Horizontal axis (left-right): Real part of Γ\n• Vertical axis (up-down): Imaginary part of Γ\n• Center (Γ = 0): Perfect match, no reflection\n• Edge (|Γ| = 1): Total reflection"
+                        },
+                        {
+                            title: "What Happens When You Move?",
+                            text: "• Moving toward CENTER: Better impedance match\n• Moving toward EDGE: Worse impedance match\n• Moving AROUND (clockwise/counter-clockwise): Changes the TYPE of mismatch (inductive vs capacitive)\n• Moving LEFT: Lower impedance\n• Moving RIGHT: Higher impedance"
+                        }
+                    ]
+                },
+                {
+                    title: "Introduction to Smith Chart",
+                    description: "The Smith chart is a graphical tool for visualizing complex impedances and reflection coefficients. The center represents a perfect match (Z = Z₀ = 50Ω). Points toward the edge represent larger mismatches."
+                },
+                {
+                    title: "Constant Resistance Circles",
+                    description: "The blue circles represent constant resistance values. Each circle shows all impedances with the same resistance (R). As you move right, resistance increases. The rightmost point on the horizontal axis represents an open circuit (infinite R). The leftmost point represents a short circuit (R = 0)."
+                },
+                {
+                    title: "Constant Reactance Curves",
+                    description: "The green arcs represent constant reactance values. Upper half is INDUCTIVE (positive X, like an inductor). Lower half is CAPACITIVE (negative X, like a capacitor). The horizontal axis has X = 0, meaning purely resistive impedance."
+                },
+                {
+                    title: "Interactive Plotting",
+                    description: "Now you can plot any impedance you want! The red dot shows your impedance point. The purple circle shows the VSWR (Voltage Standing Wave Ratio) - how much the impedance mismatches. Use the sliders to explore how different resistance and reactance values map onto the Smith chart."
+                }
+            ];
+
+            const gamma = impedanceToGamma(impedance.r, impedance.x);
+            const gammaMag = Math.sqrt(gamma.re * gamma.re + gamma.im * gamma.im);
+            const vswr = gammaMag < 0.999 ? ((1 + gammaMag) / (1 - gammaMag)) : 999;
+
+            return e('div', { className: 'min-h-screen bg-slate-900 text-white' },
+                e('div', { className: 'max-w-7xl mx-auto px-6 py-8' },
+                    e('div', { className: 'grid grid-cols-1 lg:grid-cols-3 gap-6' },
+                        // Left sidebar
+                        e('div', { className: 'lg:col-span-1' },
+                            e('div', { className: 'bg-slate-800 rounded-lg p-4 sticky top-4' },
+                                e('h3', { className: 'text-lg font-bold mb-4' }, 'Tutorial Steps'),
+                                e('div', { className: 'space-y-2' },
+                                    stepContent.map((step, idx) =>
+                                        e('button', {
+                                            key: idx,
+                                            onClick: () => setSmithStep(idx),
+                                            className: `w-full p-3 rounded text-left transition-colors ${
+                                                smithStep === idx ? 'bg-blue-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-gray-300'
+                                            }`
+                                        },
+                                            e('div', { className: 'font-semibold text-sm' }, `Step ${idx}`),
+                                            e('div', { className: 'text-xs mt-1 opacity-80' }, step.title)
+                                        )
+                                    )
+                                ),
+                                smithStep === 4 && e('div', { className: 'mt-6 pt-6 border-t border-slate-700 space-y-4' },
+                                    e('div', null,
+                                        e('label', { className: 'text-sm text-gray-400 block mb-2' }, `Resistance: ${impedance.r.toFixed(1)}Ω`),
+                                        e('input', {
+                                            type: 'range',
+                                            min: 0,
+                                            max: 200,
+                                            step: 0.5,
+                                            value: impedance.r,
+                                            onChange: (evt) => setImpedance({ ...impedance, r: parseFloat(evt.target.value) }),
+                                            className: 'w-full'
+                                        })
+                                    ),
+                                    e('div', null,
+                                        e('label', { className: 'text-sm text-gray-400 block mb-2' }, `Reactance: ${impedance.x.toFixed(1)}Ω`),
+                                        e('input', {
+                                            type: 'range',
+                                            min: -200,
+                                            max: 200,
+                                            step: 0.5,
+                                            value: impedance.x,
+                                            onChange: (evt) => setImpedance({ ...impedance, x: parseFloat(evt.target.value) }),
+                                            className: 'w-full'
+                                        })
+                                    ),
+                                    e('div', { className: 'bg-slate-700 p-3 rounded text-sm space-y-1' },
+                                        e('div', null, e('strong', { className: 'text-blue-400' }, 'Impedance: '), `${impedance.r.toFixed(1)} ${impedance.x >= 0 ? '+' : ''}${impedance.x.toFixed(1)}j Ω`),
+                                        e('div', null, e('strong', { className: 'text-purple-400' }, 'Γ: '), `${gamma.re.toFixed(3)} ${gamma.im >= 0 ? '+' : ''}${gamma.im.toFixed(3)}j`),
+                                        e('div', null, e('strong', { className: 'text-green-400' }, 'VSWR: '), vswr < 99 ? vswr.toFixed(2) : '∞')
+                                    )
+                                )
+                            )
+                        ),
+                        // Main content
+                        e('div', { className: 'lg:col-span-2 space-y-6' },
+                            e('div', { className: 'bg-slate-800 rounded-lg p-6' },
+                                e('h2', { className: 'text-2xl font-bold mb-2' }, stepContent[smithStep].title),
+                                e('p', { className: 'text-gray-300 mb-6' }, stepContent[smithStep].description),
+                                
+                                // Show detailed sections for step 0
+                                stepContent[smithStep].details && e('div', { className: 'space-y-4 mb-6' },
+                                    stepContent[smithStep].details.map((detail, idx) =>
+                                        e('div', { key: idx, className: 'bg-slate-700 p-4 rounded' },
+                                            e('h4', { className: 'text-blue-400 font-semibold mb-2' }, detail.title),
+                                            e('p', { 
+                                                className: 'text-sm text-gray-300 whitespace-pre-line' 
+                                            }, detail.text)
+                                        )
+                                    )
+                                ),
+                                
+                                e('canvas', {
+                                    ref: canvasRef,
+                                    width: 600,
+                                    height: 600,
+                                    className: 'w-full border border-slate-700 rounded'
+                                }),
+                                
+                                // Additional explanation for step 0
+                                smithStep === 0 && e('div', { className: 'mt-4 bg-green-900 bg-opacity-30 p-4 rounded border border-green-700' },
+                                    e('p', { className: 'text-sm text-gray-300' },
+                                        e('strong', { className: 'text-green-400' }, 'Key Takeaway: '),
+                                        'The Smith chart is just a fancy way of plotting Γ (reflection coefficient) on a circular graph. Once you understand this, the constant resistance circles and reactance arcs make sense - they\'re showing how impedance values map to this circular Γ space.'
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            );
+        };
+
+        // ============================================
+        // MAIN APP
+        // ============================================
+        const App = () => {
+            const [activeChapter, setActiveChapter] = useState('nfc');
+
+            return e('div', { className: 'min-h-screen bg-slate-900' },
+                e('div', { className: 'bg-slate-800 border-b border-slate-700 sticky top-0 z-50' },
+                    e('div', { className: 'max-w-7xl mx-auto px-6 py-4' },
+                        e('div', { className: 'flex items-center justify-between gap-4 flex-wrap' },
+                            e('div', null,
+                                e('h1', { className: 'text-2xl font-bold' }, 'NFC & Smith Chart Tutorial'),
+                                e('p', { className: 'text-sm text-gray-400' }, 'Interactive learning for RF matching and troubleshooting')
+                            ),
+                            e('div', { className: 'flex gap-2' },
+                                e('button', {
+                                    onClick: () => setActiveChapter('nfc'),
+                                    className: `px-4 py-2 rounded transition-colors font-semibold ${
+                                        activeChapter === 'nfc' ? 'bg-blue-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-gray-300'
+                                    }`
+                                }, 'NFC Concepts'),
+                                e('button', {
+                                    onClick: () => setActiveChapter('smith'),
+                                    className: `px-4 py-2 rounded transition-colors font-semibold ${
+                                        activeChapter === 'smith' ? 'bg-blue-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-gray-300'
+                                    }`
+                                }, 'Smith Chart')
+                            )
+                        )
+                    )
+                ),
+                e('div', { className: 'max-w-7xl mx-auto px-6 py-8' },
+                    activeChapter === 'nfc' ? e(NFCConceptsExplained) : e(SmithChartTutorial)
+                )
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(e(App));
+    </script>
+</body>
+</html>
