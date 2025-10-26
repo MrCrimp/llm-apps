@@ -104,6 +104,7 @@
             const antennaSizeCanvasRef = useRef(null);
             const resonanceCanvasRef = useRef(null);
             const qFactorVisualizationCanvasRef = useRef(null);
+            const qFactorAnimationCanvasRef = useRef(null);
             const smithNFCCanvasRef = useRef(null);
             const smithTuningCanvasRef = useRef(null);
             const [howItWorksStep, setHowItWorksStep] = useState(0);
@@ -111,6 +112,7 @@
             const [tagSize, setTagSize] = useState(50);
             const [tuningCapacitor, setTuningCapacitor] = useState(100); // pF
             const [smithExampleType, setSmithExampleType] = useState('good'); // 'good', 'inductive', 'capacitive', 'mismatch'
+            const [antennaShape, setAntennaShape] = useState('round'); // 'round' or 'square'
 
             const getBandwidth = (q, f0) => f0 / q;
 
@@ -689,18 +691,37 @@
                 
                 const centerX = width / 2;
                 const centerY = height / 2;
-                
-                // Draw reader antenna
-                const readerRadius = 50;
+
+                // Draw reader antenna (scale with antenna diameter)
+                const readerRadius = Math.min(antennaDiameter * 0.8, 60);
                 ctx.strokeStyle = '#3b82f6';
                 ctx.lineWidth = 3;
-                ctx.beginPath();
-                ctx.arc(centerX, centerY, readerRadius, 0, 2 * Math.PI);
-                ctx.stroke();
-                
-                for (let i = 0; i < 3; i++) {
+
+                // Draw outer antenna shape (round or square)
+                if (antennaShape === 'round') {
                     ctx.beginPath();
-                    ctx.arc(centerX, centerY, readerRadius - 8 - i * 6, 0, 2 * Math.PI);
+                    ctx.arc(centerX, centerY, readerRadius, 0, 2 * Math.PI);
+                    ctx.stroke();
+                } else {
+                    // Square antenna
+                    const squareSize = readerRadius * 2;
+                    ctx.beginPath();
+                    ctx.rect(centerX - readerRadius, centerY - readerRadius, squareSize, squareSize);
+                    ctx.stroke();
+                }
+
+                // Draw coil windings (use actual number of turns)
+                const maxTurnsToShow = Math.min(antennaTurns, 5); // Cap at 5 for visual clarity
+                for (let i = 0; i < maxTurnsToShow; i++) {
+                    const windingOffset = 8 + i * 6;
+                    ctx.beginPath();
+                    if (antennaShape === 'round') {
+                        ctx.arc(centerX, centerY, readerRadius - windingOffset, 0, 2 * Math.PI);
+                    } else {
+                        // Square windings
+                        const windingSize = (readerRadius - windingOffset) * 2;
+                        ctx.rect(centerX - (readerRadius - windingOffset), centerY - (readerRadius - windingOffset), windingSize, windingSize);
+                    }
                     ctx.stroke();
                 }
                 
@@ -978,20 +999,145 @@
                 ctx.setLineDash([]);
             };
 
+            // Animated Q Factor demonstration - responds to slider!
+            const drawQFactorAnimation = (timestamp) => {
+                const canvas = qFactorAnimationCanvasRef.current;
+                if (!canvas) return;
+
+                const ctx = canvas.getContext('2d');
+                const width = canvas.width;
+                const height = canvas.height;
+
+                ctx.fillStyle = '#1e293b';
+                ctx.fillRect(0, 0, width, height);
+
+                const centerX = width / 2;
+                const centerY = height / 2;
+
+                // Animation time in seconds
+                const time = (timestamp || 0) / 1000;
+
+                // Use the ACTUAL Q value from the slider!
+                const currentQ = qFactor;
+                const antennaRadius = 45;
+
+                // Normalize Q to decay rate (5-50 range → 0.05-0.5 decay)
+                // Higher Q = slower decay (stores energy longer)
+                const decayRate = 0.5 - ((currentQ - 5) / 45) * 0.45;
+
+                // Pulsing effect - slower decay for higher Q
+                const pulse = Math.abs(Math.sin(time * 2)) * Math.exp(-(time % 2) * decayRate);
+
+                // Field strength scales with Q (higher Q = stronger field)
+                const baseStrength = 0.2 + ((currentQ - 5) / 45) * 0.3;
+                const fieldStrength = baseStrength + pulse * 0.6;
+
+                // Title showing current Q
+                ctx.fillStyle = '#fbbf24';
+                ctx.font = 'bold 18px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(`Your Current Q = ${currentQ}`, centerX, 30);
+
+                // Color changes based on Q value
+                let antennaColor, fieldColor;
+                if (currentQ < 15) {
+                    antennaColor = '#10b981'; // Green for low Q
+                    fieldColor = 'rgba(16, 185, 129,';
+                    ctx.fillStyle = '#10b981';
+                    ctx.font = '12px sans-serif';
+                    ctx.fillText('(Low Q: Quick energy decay, stable)', centerX, 50);
+                } else if (currentQ < 30) {
+                    antennaColor = '#fbbf24'; // Yellow for medium Q
+                    fieldColor = 'rgba(251, 191, 36,';
+                    ctx.fillStyle = '#fbbf24';
+                    ctx.font = '12px sans-serif';
+                    ctx.fillText('(Medium Q: Balanced)', centerX, 50);
+                } else {
+                    antennaColor = '#8b5cf6'; // Purple for high Q
+                    fieldColor = 'rgba(139, 92, 246,';
+                    ctx.fillStyle = '#8b5cf6';
+                    ctx.font = '12px sans-serif';
+                    ctx.fillText('(High Q: Sustained energy, long range)', centerX, 50);
+                }
+
+                // Antenna coil (center)
+                ctx.strokeStyle = antennaColor;
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, antennaRadius, 0, 2 * Math.PI);
+                ctx.stroke();
+
+                // Inner windings
+                for (let i = 1; i <= 2; i++) {
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, antennaRadius - i * 10, 0, 2 * Math.PI);
+                    ctx.stroke();
+                }
+
+                // Pulsing field - size depends on Q
+                const maxFieldSize = 50 + currentQ * 1.5; // Higher Q = larger potential field
+                const fieldRadius = antennaRadius + maxFieldSize * fieldStrength;
+                const gradient = ctx.createRadialGradient(centerX, centerY, antennaRadius, centerX, centerY, fieldRadius);
+                gradient.addColorStop(0, `${fieldColor} ${0.7 * fieldStrength})`);
+                gradient.addColorStop(0.5, `${fieldColor} ${0.3 * fieldStrength})`);
+                gradient.addColorStop(1, `${fieldColor} 0)`);
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, fieldRadius, 0, 2 * Math.PI);
+                ctx.fill();
+
+                // Energy storage indicator with bar
+                const energyPercent = fieldStrength * 100;
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '12px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(`Stored Energy: ${energyPercent.toFixed(0)}%`, centerX, height - 40);
+
+                // Energy bar
+                const barWidth = 200;
+                const barHeight = 15;
+                const barX = centerX - barWidth / 2;
+                const barY = height - 30;
+
+                ctx.fillStyle = '#334155';
+                ctx.fillRect(barX, barY, barWidth, barHeight);
+
+                ctx.fillStyle = antennaColor;
+                ctx.fillRect(barX, barY, barWidth * (energyPercent / 100), barHeight);
+
+                ctx.strokeStyle = '#64748b';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(barX, barY, barWidth, barHeight);
+
+                // Bandwidth indicator
+                const bandwidth = getBandwidth(currentQ, frequency);
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '10px sans-serif';
+                ctx.fillText(`Bandwidth: ${bandwidth.toFixed(3)} MHz ${currentQ > 30 ? '(narrow - selective!)' : currentQ > 15 ? '(moderate)' : '(wide - forgiving!)'}`, centerX, height - 10);
+
+                // Continue animation
+                if (concept === 'qfactor') {
+                    requestAnimationFrame(drawQFactorAnimation);
+                }
+            };
+
             useEffect(() => {
                 if (concept === 'resonance') {
                     drawResonanceTuning();
                 } else if (concept === 'qfactor') {
                     drawQFactorTradeoffs();
+                    // Start animation
+                    requestAnimationFrame(drawQFactorAnimation);
                 }
-            }, [concept, tuningCapacitor, qFactor, capValue]);
+            }, [concept, tuningCapacitor, qFactor, capValue, antennaDiameter, antennaTurns, antennaWidth, antennaGap, antennaShape]);
             
-            // Initialize tuning capacitor when entering resonance section
+            // Initialize tuning capacitor when entering resonance section or when antenna parameters change
             useEffect(() => {
                 if (concept === 'resonance') {
                     setTuningCapacitor(parseFloat(capValue));
                 }
-            }, [concept]);
+            }, [concept, capValue]);
 
             const drawSmithNFCExamples = () => {
                 const canvas = smithNFCCanvasRef.current;
@@ -1618,6 +1764,24 @@
                                 height: 300,
                                 className: 'w-full border border-slate-700 rounded mb-3'
                             }),
+
+                            // Antenna shape toggle
+                            e('div', { className: 'flex gap-2 mb-3 justify-center' },
+                                e('span', { className: 'text-sm text-gray-400 mr-2 self-center' }, 'Antenna Shape:'),
+                                e('button', {
+                                    onClick: () => setAntennaShape('round'),
+                                    className: `px-4 py-2 rounded text-sm font-semibold transition-colors ${
+                                        antennaShape === 'round' ? 'bg-blue-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-gray-300'
+                                    }`
+                                }, 'Round'),
+                                e('button', {
+                                    onClick: () => setAntennaShape('square'),
+                                    className: `px-4 py-2 rounded text-sm font-semibold transition-colors ${
+                                        antennaShape === 'square' ? 'bg-blue-600 text-white' : 'bg-slate-700 hover:bg-slate-600 text-gray-300'
+                                    }`
+                                }, 'Square')
+                            ),
+
                             e('div', { className: 'space-y-2' },
                                 e('label', { className: 'text-sm text-gray-400 block' }, 
                                     `Tuning Capacitor: ${tuningCapacitor}pF`
@@ -1697,7 +1861,7 @@
                         ),
                         e('div', { className: 'bg-yellow-900 bg-opacity-30 p-3 rounded border border-yellow-700' },
                             e('p', { className: 'text-sm text-gray-300' },
-                                e('strong', null, 'Reality check:'), ' This gives you a starting value. Real antenna inductance depends on PCB layout, metal nearby, etc. Always measure!'
+                                e('strong', null, 'Reality check:'), ' This formula is a simplified educational approximation. Real antenna inductance depends on PCB layout, metal nearby, trace width, spacing, and many other factors. Always measure with proper RF equipment!'
                             )
                         )
                     )
@@ -1710,7 +1874,52 @@
                         e('p', { className: 'text-gray-300' },
                             'Q factor controls the bandwidth. Higher Q = narrower bandwidth = more range but less tolerance to component variations.'
                         ),
-                        
+
+                        // Interactive Q factor slider (moved to top)
+                        e('div', { className: 'bg-gradient-to-r from-purple-900 to-blue-900 bg-opacity-30 p-4 rounded border border-purple-700 space-y-3' },
+                            e('h4', { className: 'text-purple-400 font-semibold text-center mb-2' }, 'Adjust Q Factor and See the Effects'),
+                            e('label', { className: 'text-lg text-white block text-center font-bold' }, `Q = ${qFactor}`),
+                            e('input', {
+                                type: 'range', min: 5, max: 50, step: 1,
+                                value: qFactor,
+                                onChange: (evt) => setQFactor(parseFloat(evt.target.value)),
+                                className: 'w-full h-3'
+                            }),
+                            e('div', { className: 'flex justify-between text-xs text-gray-400' },
+                                e('span', null, 'Low Q (Wide BW)'),
+                                e('span', { className: 'font-mono' }, `BW: ${getBandwidth(qFactor, frequency).toFixed(3)} MHz`),
+                                e('span', null, 'High Q (Narrow BW)')
+                            )
+                        ),
+
+                        // Animated Energy Storage Demonstration
+                        e('div', { className: 'bg-slate-800 p-4 rounded border border-yellow-700' },
+                            e('h4', { className: 'text-yellow-400 font-semibold mb-3' }, 'Live Animation: Energy Storage in Antenna'),
+                            e('canvas', {
+                                ref: qFactorAnimationCanvasRef,
+                                width: 600,
+                                height: 250,
+                                className: 'w-full border border-slate-700 rounded'
+                            }),
+                            e('p', { className: 'text-xs text-gray-400 mt-3' },
+                                'Watch how High Q systems store and sustain energy longer (slower decay), while Low Q systems lose energy quickly. This demonstrates why High Q gives longer range!'
+                            )
+                        ),
+
+                        // Frequency Response Chart
+                        e('div', { className: 'bg-slate-800 p-4 rounded border border-blue-700' },
+                            e('h4', { className: 'text-blue-400 font-semibold mb-3' }, 'Frequency Response'),
+                            e('canvas', {
+                                ref: canvasRef,
+                                width: 600,
+                                height: 300,
+                                className: 'w-full border border-slate-700 rounded'
+                            }),
+                            e('p', { className: 'text-xs text-gray-400 mt-3' },
+                                'This shows how the antenna responds to different frequencies. Higher Q = sharper peak (more selective, but narrower operating range).'
+                            )
+                        ),
+
                         // Q factor trade-off visualization
                         e('div', { className: 'bg-slate-800 p-4 rounded border border-green-700 mb-4' },
                             e('h4', { className: 'text-green-400 font-semibold mb-3' }, 'The Trade-off: Range vs. Reliability'),
@@ -1721,20 +1930,7 @@
                                 className: 'w-full border border-slate-700 rounded'
                             }),
                             e('p', { className: 'text-xs text-gray-400 mt-3' },
-                                'High Q gives you a stronger field and longer range, but makes the system sensitive to variations. Low Q is more forgiving and stable, but limits your range. Choose based on your requirements!'
-                            )
-                        ),
-                        
-                        e('div', { className: 'bg-slate-700 p-4 rounded space-y-3' },
-                            e('label', { className: 'text-sm text-gray-400 block' }, `Q Factor: ${qFactor}`),
-                            e('input', {
-                                type: 'range', min: 5, max: 50, step: 1,
-                                value: qFactor,
-                                onChange: (evt) => setQFactor(parseFloat(evt.target.value)),
-                                className: 'w-full'
-                            }),
-                            e('p', { className: 'text-sm text-gray-400 mt-2' }, 
-                                `Bandwidth: ${getBandwidth(qFactor, frequency).toFixed(3)} MHz`
+                                'High Q gives you a stronger field and longer range, but makes the system sensitive to variations. Low Q is more forgiving and stable, but limits your range.'
                             )
                         ),
                         e('div', { className: 'bg-blue-900 bg-opacity-30 p-4 rounded border border-blue-700 space-y-2' },
@@ -1769,7 +1965,13 @@
                             e('strong', null, 'That\'s where the Smith chart comes in.'),
                             ' It\'s a tool to visualize and verify your tuning using a Vector Network Analyzer (VNA).'
                         ),
-                        
+
+                        e('div', { className: 'bg-yellow-900 bg-opacity-30 p-3 rounded border border-yellow-700 text-sm' },
+                            e('p', { className: 'text-gray-300' },
+                                e('strong', null, 'Important:'), ' For NFC, you\'re often NOT trying to reach the center (50Ω). Many ICs want low impedance (3-10Ω typical for ISO 14443 Type A/B; always check your specific IC datasheet). The Smith chart shows you if you\'re resonant (on horizontal axis) and what the impedance magnitude is. That\'s what matters!'
+                            )
+                        ),
+
                         e('div', { className: 'bg-blue-900 bg-opacity-30 p-4 rounded border border-blue-700' },
                             e('h4', { className: 'text-blue-400 font-semibold mb-2' }, 'Connecting the Dots: Resonance → Smith Chart'),
                             e('div', { className: 'text-sm text-gray-300 space-y-2' },
@@ -1893,7 +2095,7 @@
                                         e('br'),
                                         e('strong', null, 'Good:'), ' C', e('sub', null, 'series'), ' is correct',
                                         e('br'),
-                                        e('strong', null, 'If left of center:'), ' Low Z is normal for NFC (3-10Ω typical)'
+                                        e('strong', null, 'If left of center:'), ' Low Z is normal for NFC (3-10Ω typical for ISO 14443 Type A/B ICs; always check your specific IC datasheet)'
                                     )
                                 ),
                                 e('div', null,
@@ -1919,17 +2121,6 @@
                                 e('li', null, 'Adjust C', e('sub', null, 'series'), ' components based on position'),
                                 e('li', null, 'Re-measure until point is on horizontal axis at target impedance')
                             )
-                        ),
-                        e('div', { className: 'bg-yellow-900 bg-opacity-30 p-3 rounded border border-yellow-700 text-sm' },
-                            e('p', { className: 'text-gray-300' },
-                                e('strong', null, 'Remember:'), ' For NFC, you\'re often NOT trying to reach the center (50Ω). Many ICs want low impedance (3-10Ω). The Smith chart shows you if you\'re resonant (on horizontal axis) and what the impedance magnitude is. That\'s what matters!'
-                            )
-                        ),
-                        e('div', { className: 'bg-blue-900 bg-opacity-30 p-3 rounded border border-blue-700 text-sm' },
-                            e('p', { className: 'text-gray-300' },
-                                e('strong', { className: 'text-blue-400' }, 'Support Tip: '), 
-                                'If a customer says "VNA shows I\'m not at 50Ω", that\'s usually FINE for NFC! What matters is: (1) Are they on the horizontal axis (resonant)? (2) Is the impedance magnitude what their IC datasheet specifies? If yes to both, they\'re good!'
-                            )
                         )
                     )
                 },
@@ -1949,7 +2140,7 @@
                                     e('ul', { className: 'text-gray-400 list-disc list-inside ml-3 space-y-1 text-xs' },
                                         e('li', null, 'Not resonant - C', e('sub', null, 'series'), ' value wrong for your antenna'),
                                         e('li', null, 'Antenna broken - measure DC resistance (should be <10Ω)'),
-                                        e('li', null, 'Wrong frequency - check oscillator is 27.12 MHz')
+                                        e('li', null, 'Wrong frequency - check oscillator is 27.12 MHz (crystal divides by 2 to generate 13.56 MHz carrier)')
                                     ),
                                     e('div', { className: 'bg-slate-800 p-2 rounded text-xs mt-2' },
                                         e('strong', { className: 'text-green-400' }, 'Debug:'), ' Measure antenna inductance. Recalculate C', e('sub', null, 'series'), '. Try ±20% values.'
@@ -2031,18 +2222,6 @@
                                     e('h2', { className: 'text-2xl font-bold' }, concepts[concept].title)
                                 ),
                                 concepts[concept].content
-                            ),
-                            concept === 'qfactor' && e('div', { className: 'bg-slate-800 rounded-lg p-6' },
-                                e('h3', { className: 'text-xl font-bold mb-4' }, 'Frequency Response Visualization'),
-                                e('canvas', {
-                                    ref: canvasRef,
-                                    width: 600,
-                                    height: 300,
-                                    className: 'w-full border border-slate-700 rounded'
-                                }),
-                                e('p', { className: 'text-sm text-gray-400 mt-3' },
-                                    'This shows how the antenna system responds to different frequencies. The peak is at 13.56 MHz. The width of the peak is the bandwidth, controlled by Q factor.'
-                                )
                             )
                         )
                     )
